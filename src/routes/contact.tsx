@@ -36,7 +36,7 @@ function ContactPage() {
           <div className="grid gap-8 lg:grid-cols-2">
             <div className="space-y-6">
               {[
-                { icon: Mail, label: "Email", value: "contact@greens.in" },
+                { icon: Mail, label: "Email", value: "contact@markone.in" },
                 { icon: Phone, label: "Phone", value: "+91 98765 43210" },
                 { icon: MapPin, label: "Address", value: "New Delhi, India" },
               ].map((item) => (

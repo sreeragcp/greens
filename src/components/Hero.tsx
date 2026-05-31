@@ -79,10 +79,10 @@ export function Hero() {
               <div className="glass-card rounded-2xl p-4 glow-brand-sm border-primary/30">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="h-7 w-7 rounded-lg bg-primary/25 flex items-center justify-center">
-                    <span className="text-xs font-bold text-primary">G</span>
+                    <span className="text-xs font-bold text-primary">M</span>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-primary tracking-wide">GREENS</p>
+                    <p className="text-[10px] font-bold text-primary tracking-wide">MARK ONE</p>
                     <p className="text-[9px] text-muted-foreground">Student ID Card</p>
                   </div>
                 </div>

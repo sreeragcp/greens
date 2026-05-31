@@ -19,10 +19,7 @@ export function Header() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary/30 to-accent/20 glow-brand-sm group-hover:scale-105 transition-transform">
-              <GraduationCap size={18} className="text-primary" />
-            </div>
-            <span className="text-xl font-bold gradient-text">Greens</span>
+            <img src="/logo.png" alt="Mark One logo" className="h-9 w-auto object-contain" />
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">

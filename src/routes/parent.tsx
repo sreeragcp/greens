@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, Edit, Check, X, Camera, Upload } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { parentSidebar } from "@/lib/nav";
+import { getParentStudents, patchParentStudent } from "@/service/parent";
 
 export const Route = createFileRoute("/parent")({
   component: ParentDashboard,
@@ -28,6 +29,7 @@ type StudentData = {
   photo: string | null;
   schoolName: string;
   status: "Sent to Parent" | "Parent Confirmed" | "Teacher Approved";
+  createdAt?: string;
 };
 
 // Dummy data: students linked to the logged-in parent's mobile
@@ -38,6 +40,7 @@ const dummyStudents: StudentData[] = [
     parentMobile: "+91 98765 43210", address: "B-45, Sector 62, Noida",
     emergencyContact: "+91 98765 43211", photo: null, schoolName: "Delhi Public School",
     status: "Sent to Parent",
+    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
     id: 2, name: "Priya Sharma", admissionNo: "ADM-102", class: "3", division: "B",
@@ -49,11 +52,19 @@ const dummyStudents: StudentData[] = [
 ];
 
 function ParentDashboard() {
-  const [students, setStudents] = useState<StudentData[]>(dummyStudents);
+  const [students, setStudents] = useState<StudentData[]>([]);
   const [editingStudent, setEditingStudent] = useState<StudentData | null>(null);
   const [viewingStudent, setViewingStudent] = useState<StudentData | null>(null);
 
-  const canEdit = (s: StudentData) => s.status === "Sent to Parent";
+  const isWithinEditWindow = (student: StudentData) => {
+    if (!student.createdAt) return true;
+    const createdAt = new Date(student.createdAt);
+    if (Number.isNaN(createdAt.getTime())) return true;
+    const diffMs = Date.now() - createdAt.getTime();
+    return diffMs <= 7 * 24 * 60 * 60 * 1000;
+  };
+
+  const canEdit = (s: StudentData) => isWithinEditWindow(s);
   const canConfirm = (s: StudentData) => s.status === "Sent to Parent";
 
   const handleConfirm = (id: number) => {
@@ -66,10 +77,76 @@ function ParentDashboard() {
     }
   };
 
-  const handleSaveEdit = (updated: StudentData) => {
-    setStudents(students.map(s => s.id === updated.id ? updated : s));
-    setEditingStudent(null);
-    toast.success("Changes saved", { description: `Updated ${updated.name}'s details.` });
+  useEffect(() => {
+    let mounted = true;
+    const loadStudents = async () => {
+      try {
+        const res = await getParentStudents();
+        const items = Array.isArray(res)
+          ? res
+          : Array.isArray(res?.results)
+            ? res.results
+            : Array.isArray(res?.data?.results)
+              ? res.data.results
+              : res?.data || [];
+
+        const mapped: StudentData[] = items.map((s: any) => ({
+          id: s.id,
+          name: s.full_name || `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.name || "",
+          admissionNo: s.admission_no || s.admissionNo || "",
+          class: s.class_name || s.class || s.className || "",
+          division: s.division || s.div || "",
+          dob: s.date_of_birth || s.dob || "",
+          bloodGroup: s.blood_group || s.bloodGroup || "",
+          gender: s.gender || "",
+          parentName: s.parent_name || s.guardian_name || s.parentName || "",
+          parentMobile: s.guardian_phone || s.parent_mobile || s.parentMobile || "",
+          address: s.address || "",
+          emergencyContact: s.emergency_contact || s.emergencyContact || "",
+          photo: s.photo || null,
+          schoolName: s.school_name || s.schoolName || "",
+          status: s.status || "Sent to Parent",
+          createdAt: s.created_at || s.createdAt || undefined,
+        }));
+
+        if (mounted) setStudents(mapped);
+      } catch (err: any) {
+        console.error("Failed to load parent students:", err);
+        toast.error("Unable to load student list");
+        if (mounted) setStudents(dummyStudents);
+      }
+    };
+
+    loadStudents();
+    return () => { mounted = false; };
+  }, []);
+
+  const handleSaveEdit = async (updated: StudentData) => {
+    try {
+      const apiResponse = await patchParentStudent(updated.id, {
+        full_name: updated.name,
+        date_of_birth: updated.dob,
+        blood_group: updated.bloodGroup,
+        gender: updated.gender,
+        parent_name: updated.parentName,
+        guardian_phone: updated.parentMobile,
+        address: updated.address,
+        emergency_contact: updated.emergencyContact,
+        photo: updated.photo,
+      });
+
+      const merged = {
+        ...updated,
+        ...apiResponse,
+      };
+
+      setStudents(students.map(s => s.id === updated.id ? merged : s));
+      setEditingStudent(null);
+      toast.success("Changes saved", { description: `Updated ${updated.name}'s details.` });
+    } catch (error: any) {
+      console.error("Failed to save parent edits:", error);
+      toast.error("Unable to update student details. Please try again.");
+    }
   };
 
   return (
@@ -97,11 +174,15 @@ function ParentDashboard() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">{viewingStudent.name}</h2>
               <div className="flex items-center gap-2">
-                {canEdit(viewingStudent) && (
+                {canEdit(viewingStudent) ? (
                   <Button variant="heroOutline" size="sm" onClick={() => { setEditingStudent(viewingStudent); }}>
                     <Edit size={14} /> Edit
                   </Button>
-                )}
+                ) : (!isWithinEditWindow(viewingStudent) ? (
+                  <span className="rounded-full bg-surface px-3 py-1 text-xs text-muted-foreground">
+                    Editable only within 7 days of creation
+                  </span>
+                ) : null)}
                 <button onClick={() => setViewingStudent(null)} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
               </div>
             </div>
@@ -155,23 +236,27 @@ function ParentDashboard() {
                     </p>
                   </div>
                 </div>
-                <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
-                  student.status === "Sent to Parent" ? "bg-yellow-500/10 text-yellow-400" :
-                  student.status === "Parent Confirmed" ? "bg-blue-500/10 text-blue-400" :
-                  "bg-emerald-500/10 text-emerald-400"
-                }`}>
-                  {student.status === "Sent to Parent" ? "Review Pending" :
-                   student.status === "Parent Confirmed" ? "Confirmed" : "Approved"}
-                </span>
+                {canEdit(student) ? (
+                  <Button variant="heroOutline" size="sm" onClick={() => setEditingStudent(student)}>
+                    <Edit size={14} /> Edit
+                  </Button>
+                ) : (
+                  <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+                    student.status === "Sent to Parent" ? "bg-yellow-500/10 text-yellow-400" :
+                    student.status === "Parent Confirmed" ? "bg-blue-500/10 text-blue-400" :
+                    "bg-emerald-500/10 text-emerald-400"
+                  }`}>
+                    {student.status === "Sent to Parent" ? "Review Pending" :
+                     student.status === "Parent Confirmed" ? "Confirmed" : "Approved"}
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2 mt-4">
                 <Button variant="outline" size="sm" onClick={() => setViewingStudent(student)}>
                   <Eye size={14} /> View Details
                 </Button>
-                {canEdit(student) && (
-                  <Button variant="heroOutline" size="sm" onClick={() => setEditingStudent(student)}>
-                    <Edit size={14} /> Edit
-                  </Button>
+                {student.status === "Sent to Parent" && !isWithinEditWindow(student) && (
+                  <span className="text-xs text-muted-foreground">Edit window expired after 7 days</span>
                 )}
                 {canConfirm(student) && (
                   <Button variant="hero" size="sm" onClick={() => handleConfirm(student.id)}>

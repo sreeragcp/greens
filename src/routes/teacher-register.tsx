@@ -3,34 +3,50 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
-  GraduationCap, School, User, Phone, Mail, ArrowRight, ArrowLeft, CheckCircle2, BookOpen, ShieldCheck, Sparkles,
+  GraduationCap,
+  School,
+  User,
+  Phone,
+  Mail,
+  ArrowRight,
+  ArrowLeft,
+  CheckCircle2,
+  BookOpen,
+  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import teacherIllustration from "@/assets/teacher-students.jpg";
+import { teacherRegistration, handleGetSchoolNames, handleVerifyOTP } from "@/service/teacher";
 
 export const Route = createFileRoute("/teacher-register")({
   component: TeacherRegister,
 });
 
 const SCHOOLS = [
-  "Delhi Public School, Noida",
-  "Greens International Academy, Bengaluru",
-  "St. Xavier's High School, Mumbai",
-  "Kendriya Vidyalaya, Chennai",
-  "Bishop Cotton School, Shimla",
-  "DAV Public School, Pune",
-  "Modern School, New Delhi",
-  "Greenwood High, Hyderabad",
+  { id: "delhi-public-school-noida", name: "Delhi Public School, Noida" },
+  { id: "markone-international-academy-bengaluru", name: "Mark One International Academy, Bengaluru" },
+  { id: "st-xaviers-high-school-mumbai", name: "St. Xavier's High School, Mumbai" },
+  { id: "kendriya-vidyalaya-chennai", name: "Kendriya Vidyalaya, Chennai" },
+  { id: "bishop-cotton-school-shimla", name: "Bishop Cotton School, Shimla" },
+  { id: "dav-public-school-pune", name: "DAV Public School, Pune" },
+  { id: "modern-school-new-delhi", name: "Modern School, New Delhi" },
+  { id: "greenwood-high-hyderabad", name: "Greenwood High, Hyderabad" },
 ];
 
 const CLASSES = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const DIVISIONS = ["A", "B", "C", "D", "E"];
 
 type TeacherProfile = {
+  schoolId: string;
   schoolName: string;
   teacherName: string;
   classGrade: string;
@@ -43,14 +59,21 @@ function TeacherRegister() {
   const navigate = useNavigate();
   const [step, setStep] = useState<"form" | "otp" | "done">("form");
   const [profile, setProfile] = useState<TeacherProfile>({
-    schoolName: "", teacherName: "", classGrade: "", division: "", mobile: "", email: "",
+    schoolId: "",
+    schoolName: "",
+    teacherName: "",
+    classGrade: "",
+    division: "",
+    mobile: "",
+    email: "",
   });
+  const [schoolList, setSchoolList] = useState<Array<{ id: string; name: string }>>([]);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!profile.schoolName) e.schoolName = "Please select your school";
+    if (!profile.schoolId) e.schoolName = "Please select your school";
     if (!profile.teacherName.trim() || profile.teacherName.trim().length < 2)
       e.teacherName = "Enter your full name";
     if (!profile.classGrade) e.classGrade = "Select class";
@@ -63,14 +86,85 @@ function TeacherRegister() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSendOtp = () => {
-    if (validate()) {
-      toast.success(`OTP sent to ${profile.mobile}`, {
-        description: "Use any 6 digits to continue (demo mode).",
-      });
-      setStep("otp");
-    } else {
+  const loadSchoolNames = async () => {
+    try {
+      const res = await handleGetSchoolNames();
+      const items = Array.isArray(res) ? res : res?.data || [];
+
+      const schools = items
+        .map((school: any) => ({
+          id:
+            school.id?.toString() ||
+            school.school_id?.toString() ||
+            school.value?.toString() ||
+            school.name?.toString() ||
+            "",
+          name:
+            school.name ||
+            school.school_name ||
+            school.schoolName ||
+            school.value ||
+            "",
+        }))
+        .filter((school: any) => school.id && school.name);
+
+      if (schools.length) {
+        setSchoolList(schools);
+      }
+    } catch (error: any) {
+      const msg =
+        error?.message ||
+        (error && JSON.stringify(error)) ||
+        "Unable to load school names";
+
+      toast.error(msg);
+    }
+  };
+
+  useEffect(() => {
+    loadSchoolNames();
+  }, []);
+
+  const availableSchools = schoolList.length ? schoolList : SCHOOLS;
+
+  const handleSendOtp = async () => {
+    if (!validate()) {
       toast.error("Please fix the highlighted fields");
+      return;
+    }
+
+    const [first_name = "", last_name = ""] = profile.teacherName
+      .trim()
+      .split(/\s+/, 2);
+
+    const payload = {
+      phone: profile.mobile,
+      first_name,
+      last_name,
+      email: profile.email,
+      role: "TEACHER",
+      school: profile.schoolId || "",
+      division: profile.division || "",
+      class: profile.classGrade || "",
+    };
+
+    try {
+      const res = await teacherRegistration(payload);
+      const success = res === true || res?.status === true || res?.success === true;
+
+      if (success) {
+        toast.success(`OTP sent to ${profile.mobile}`, {
+          description: "Use any 6 digits to continue (demo mode).",
+        });
+        setStep("otp");
+      } else {
+        toast.error("Unable to start registration. Please try again.");
+      }
+    } catch (err: any) {
+      const msg =
+        err?.message || (err && JSON.stringify(err)) ||
+        "Unable to start registration. Please try again.";
+      toast.error(msg);
     }
   };
 
@@ -79,7 +173,8 @@ function TeacherRegister() {
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
-    if (value && index < 5) document.getElementById(`reg-otp-${index + 1}`)?.focus();
+    if (value && index < 5)
+      document.getElementById(`reg-otp-${index + 1}`)?.focus();
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
@@ -87,16 +182,18 @@ function TeacherRegister() {
       document.getElementById(`reg-otp-${index - 1}`)?.focus();
   };
 
-  const handleVerify = () => {
+  const handleVerify = async() => {
     if (otp.join("").length < 6) {
       toast.error("Please enter the full 6-digit OTP");
       return;
     }
-    try { localStorage.setItem("greens.teacherProfile", JSON.stringify(profile)); } catch {
-      // ignore
-    }
+
+    const response = await handleVerifyOTP(profile.mobile, otp.join("")); 
+    console.log(response,"rrrrrrrrrrrrrrr");
+    
+
     toast.success(`Welcome, ${profile.teacherName}!`, {
-      description: "Redirecting to your dashboard…",
+      description: "OTP verified — redirecting to your dashboard…",
     });
     setStep("done");
     setTimeout(() => navigate({ to: "/teacher" }), 1200);
@@ -107,12 +204,16 @@ function TeacherRegister() {
       <header className="border-b border-border/40 bg-background/60 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between px-4 py-4 gap-3">
           <Link to="/" className="flex items-center gap-2 min-w-0">
-            <div className="h-9 w-9 shrink-0 rounded-xl bg-primary/15 flex items-center justify-center">
-              <GraduationCap size={18} className="text-primary" />
-            </div>
-            <span className="font-bold text-base sm:text-lg truncate">Greens <span className="text-primary">Portal</span></span>
+            <img src="/logo.png" alt="Mark One logo" className="h-9 w-auto shrink-0 object-contain" />
+            <span className="font-bold text-base sm:text-lg truncate">
+              <span className="sr-only">Mark One</span>
+              <span className="text-primary">Portal</span>
+            </span>
           </Link>
-          <Link to="/login" className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors text-right shrink-0">
+          <Link
+            to="/login"
+            className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors text-right shrink-0"
+          >
             <span className="hidden sm:inline">Already registered? </span>
             <span className="text-primary font-medium">Login</span>
           </Link>
@@ -124,13 +225,17 @@ function TeacherRegister() {
         <aside className="hidden lg:flex flex-col gap-6 sticky top-24 animate-slide-in-left">
           <div className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-4 py-1.5">
             <Sparkles size={14} className="text-primary" />
-            <span className="text-xs font-medium text-primary">For Educators</span>
+            <span className="text-xs font-medium text-primary">
+              For Educators
+            </span>
           </div>
           <h1 className="text-4xl xl:text-5xl font-bold tracking-tight leading-tight">
-            Empower your classroom, <span className="gradient-text">one student at a time</span>
+            Empower your classroom,{" "}
+            <span className="gradient-text">one student at a time</span>
           </h1>
           <p className="text-muted-foreground text-base max-w-md">
-            Join hundreds of teachers issuing secure, professional student ID cards in minutes. Built for Indian schools, loved by educators.
+            Join hundreds of teachers issuing secure, professional student ID
+            cards in minutes. Built for Indian schools, loved by educators.
           </p>
 
           <div className="rounded-3xl overflow-hidden glass-card glow-green-sm">
@@ -155,7 +260,9 @@ function TeacherRegister() {
           <div className="lg:hidden text-center mb-6">
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-4 py-1.5 mb-4">
               <GraduationCap size={14} className="text-primary" />
-              <span className="text-xs font-medium text-primary">Teacher Registration</span>
+              <span className="text-xs font-medium text-primary">
+                Teacher Registration
+              </span>
             </div>
             <h1 className="text-3xl font-bold tracking-tight">
               Welcome, <span className="gradient-text">Educator</span>
@@ -173,31 +280,69 @@ function TeacherRegister() {
           </div>
 
           <div className="flex items-center justify-center lg:justify-start gap-2 mb-6">
-            <Stepper label="Details" active={step === "form"} done={step !== "form"} />
+            <Stepper
+              label="Details"
+              active={step === "form"}
+              done={step !== "form"}
+            />
             <div className="h-px w-10 bg-border" />
-            <Stepper label="Verify OTP" active={step === "otp"} done={step === "done"} />
+            <Stepper
+              label="Verify OTP"
+              active={step === "otp"}
+              done={step === "done"}
+            />
             <div className="h-px w-10 bg-border" />
             <Stepper label="Done" active={step === "done"} done={false} />
           </div>
 
           <div className="glass-card rounded-2xl p-5 sm:p-8 glow-green-sm">
             {step === "form" && (
-              <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); handleSendOtp(); }}>
-                <Field label="School Name" icon={School} error={errors.schoolName}>
-                  <Select value={profile.schoolName} onValueChange={(v) => setProfile({ ...profile, schoolName: v })}>
+              <form
+                className="space-y-5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendOtp();
+                }}
+              >
+                <Field
+                  label="School Name"
+                  icon={School}
+                  error={errors.schoolName}
+                >
+                  <Select
+                    value={profile.schoolId}
+                    onValueChange={(v) => {
+                      const selected = availableSchools.find((item) => item.id === v);
+                      setProfile({
+                        ...profile,
+                        schoolId: v,
+                        schoolName: selected?.name || "",
+                      });
+                    }}
+                  >
                     <SelectTrigger className="bg-surface border-border h-11 pl-10">
                       <SelectValue placeholder="Select your school" />
                     </SelectTrigger>
                     <SelectContent>
-                      {SCHOOLS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {availableSchools.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </Field>
 
-                <Field label="Teacher Full Name" icon={User} error={errors.teacherName}>
+                <Field
+                  label="Teacher Full Name"
+                  icon={User}
+                  error={errors.teacherName}
+                >
                   <Input
                     value={profile.teacherName}
-                    onChange={(e) => setProfile({ ...profile, teacherName: e.target.value })}
+                    onChange={(e) =>
+                      setProfile({ ...profile, teacherName: e.target.value })
+                    }
                     placeholder="e.g., Priya Sharma"
                     maxLength={80}
                     className="bg-surface border-border h-11 pl-10"
@@ -207,27 +352,53 @@ function TeacherRegister() {
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-sm">Class</Label>
-                    <Select value={profile.classGrade} onValueChange={(v) => setProfile({ ...profile, classGrade: v })}>
+                    <Select
+                      value={profile.classGrade}
+                      onValueChange={(v) =>
+                        setProfile({ ...profile, classGrade: v })
+                      }
+                    >
                       <SelectTrigger className="bg-surface border-border h-11">
                         <SelectValue placeholder="Select class" />
                       </SelectTrigger>
                       <SelectContent>
-                        {CLASSES.map((c) => <SelectItem key={c} value={c}>Class {c}</SelectItem>)}
+                        {CLASSES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            Class {c}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                    {errors.classGrade && <p className="text-xs text-destructive">{errors.classGrade}</p>}
+                    {errors.classGrade && (
+                      <p className="text-xs text-destructive">
+                        {errors.classGrade}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm">Division</Label>
-                    <Select value={profile.division} onValueChange={(v) => setProfile({ ...profile, division: v })}>
+                    <Select
+                      value={profile.division}
+                      onValueChange={(v) =>
+                        setProfile({ ...profile, division: v })
+                      }
+                    >
                       <SelectTrigger className="bg-surface border-border h-11">
                         <SelectValue placeholder="Select division" />
                       </SelectTrigger>
                       <SelectContent>
-                        {DIVISIONS.map((d) => <SelectItem key={d} value={d}>Division {d}</SelectItem>)}
+                        {DIVISIONS.map((d) => (
+                          <SelectItem key={d} value={d}>
+                            Division {d}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                    {errors.division && <p className="text-xs text-destructive">{errors.division}</p>}
+                    {errors.division && (
+                      <p className="text-xs text-destructive">
+                        {errors.division}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -235,7 +406,9 @@ function TeacherRegister() {
                   <Input
                     type="tel"
                     value={profile.mobile}
-                    onChange={(e) => setProfile({ ...profile, mobile: e.target.value })}
+                    onChange={(e) =>
+                      setProfile({ ...profile, mobile: e.target.value })
+                    }
                     placeholder="+91 98765 43210"
                     maxLength={20}
                     className="bg-surface border-border h-11 pl-10"
@@ -246,7 +419,9 @@ function TeacherRegister() {
                   <Input
                     type="email"
                     value={profile.email}
-                    onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                    onChange={(e) =>
+                      setProfile({ ...profile, email: e.target.value })
+                    }
                     placeholder="teacher@school.edu.in"
                     maxLength={120}
                     className="bg-surface border-border h-11 pl-10"
@@ -254,16 +429,28 @@ function TeacherRegister() {
                 </Field>
 
                 <div className="rounded-xl bg-primary/5 border border-primary/15 p-3 text-xs text-muted-foreground">
-                  <span className="text-primary font-medium">Note:</span> A 6-digit OTP will be sent to your mobile to verify your identity.
+                  <span className="text-primary font-medium">Note:</span> A
+                  6-digit OTP will be sent to your mobile to verify your
+                  identity.
                 </div>
 
-                <Button type="submit" variant="hero" size="lg" className="w-full">
+                <Button
+                  type="submit"
+                  variant="hero"
+                  size="lg"
+                  className="w-full"
+                >
                   Continue to OTP <ArrowRight size={16} />
                 </Button>
 
                 <p className="text-center text-sm text-muted-foreground">
                   Already registered?{" "}
-                  <Link to="/login" className="text-primary hover:underline font-medium">Login here</Link>
+                  <Link
+                    to="/login"
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Login here
+                  </Link>
                 </p>
               </form>
             )}
@@ -273,7 +460,10 @@ function TeacherRegister() {
                 <div className="text-center">
                   <h2 className="text-xl font-semibold">Verify your mobile</h2>
                   <p className="text-sm text-muted-foreground mt-1">
-                    We sent a 6-digit code to <span className="text-foreground font-medium">{profile.mobile}</span>
+                    We sent a 6-digit code to{" "}
+                    <span className="text-foreground font-medium">
+                      {profile.mobile}
+                    </span>
                   </p>
                 </div>
 
@@ -298,13 +488,20 @@ function TeacherRegister() {
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => toast.success(`OTP resent to ${profile.mobile}`)}
+                    onClick={() =>
+                      toast.success(`OTP resent to ${profile.mobile}`)
+                    }
                   >
                     Resend OTP
                   </button>
                 </p>
 
-                <Button variant="hero" size="lg" className="w-full" onClick={handleVerify}>
+                <Button
+                  variant="hero"
+                  size="lg"
+                  className="w-full"
+                  onClick={handleVerify}
+                >
                   <CheckCircle2 size={16} /> Verify & Complete Registration
                 </Button>
 
@@ -324,7 +521,9 @@ function TeacherRegister() {
                   <CheckCircle2 size={32} className="text-primary" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold">Registration successful!</h2>
+                  <h2 className="text-xl font-semibold">
+                    Registration successful!
+                  </h2>
                   <p className="text-sm text-muted-foreground mt-1">
                     Redirecting you to your teacher dashboard…
                   </p>
@@ -338,7 +537,15 @@ function TeacherRegister() {
   );
 }
 
-function Perk({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle: string }) {
+function Perk({
+  icon: Icon,
+  title,
+  subtitle,
+}: {
+  icon: React.ElementType;
+  title: string;
+  subtitle: string;
+}) {
   return (
     <div className="glass-card rounded-xl p-3 text-center">
       <Icon size={18} className="mx-auto text-primary mb-1" />
@@ -348,7 +555,15 @@ function Perk({ icon: Icon, title, subtitle }: { icon: React.ElementType; title:
   );
 }
 
-function Stepper({ label, active, done }: { label: string; active: boolean; done: boolean }) {
+function Stepper({
+  label,
+  active,
+  done,
+}: {
+  label: string;
+  active: boolean;
+  done: boolean;
+}) {
   return (
     <div className="flex items-center gap-2">
       <div
@@ -356,13 +571,15 @@ function Stepper({ label, active, done }: { label: string; active: boolean; done
           done
             ? "bg-primary text-primary-foreground"
             : active
-            ? "bg-primary/20 text-primary border border-primary/40"
-            : "bg-surface text-muted-foreground border border-border"
+              ? "bg-primary/20 text-primary border border-primary/40"
+              : "bg-surface text-muted-foreground border border-border"
         }`}
       >
         {done ? <CheckCircle2 size={14} /> : label[0]}
       </div>
-      <span className={`text-xs font-medium hidden sm:inline ${active || done ? "text-foreground" : "text-muted-foreground"}`}>
+      <span
+        className={`text-xs font-medium hidden sm:inline ${active || done ? "text-foreground" : "text-muted-foreground"}`}
+      >
         {label}
       </span>
     </div>
@@ -370,15 +587,24 @@ function Stepper({ label, active, done }: { label: string; active: boolean; done
 }
 
 function Field({
-  label, icon: Icon, error, children,
+  label,
+  icon: Icon,
+  error,
+  children,
 }: {
-  label: string; icon: React.ElementType; error?: string; children: React.ReactNode;
+  label: string;
+  icon: React.ElementType;
+  error?: string;
+  children: React.ReactNode;
 }) {
   return (
     <div className="space-y-2">
       <Label className="text-sm">{label}</Label>
       <div className="relative">
-        <Icon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10 pointer-events-none" />
+        <Icon
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10 pointer-events-none"
+        />
         {children}
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}

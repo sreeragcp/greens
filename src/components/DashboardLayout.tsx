@@ -25,11 +25,9 @@ export function DashboardLayout({ children, title, role, items }: DashboardLayou
       {/* Sidebar - desktop */}
       <aside className="hidden lg:flex lg:w-64 flex-col border-r border-border bg-surface fixed inset-y-0 left-0 z-30">
         <div className="flex h-16 items-center gap-2 px-6 border-b border-border">
-          <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
-            <span className="text-sm font-bold text-primary">G</span>
-          </div>
+          <img src="/logo.png" alt="Mark One logo" className="h-8 w-auto object-contain" />
           <div>
-            <span className="text-sm font-bold gradient-text">Greens</span>
+            <span className="text-sm font-bold gradient-text sr-only">Mark One</span>
             <p className="text-[10px] text-muted-foreground">{role} Portal</p>
           </div>
         </div>
@@ -67,10 +65,8 @@ export function DashboardLayout({ children, title, role, items }: DashboardLayou
           <aside className="relative w-72 h-full bg-surface border-r border-border flex flex-col animate-slide-in-left">
             <div className="flex h-16 items-center justify-between px-6 border-b border-border">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                  <span className="text-sm font-bold text-primary">G</span>
-                </div>
-                <span className="text-sm font-bold gradient-text">Greens</span>
+              <img src="/logo.png" alt="Mark One logo" className="h-8 w-auto object-contain" />
+              <span className="text-sm font-bold gradient-text sr-only">Mark One</span>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="text-muted-foreground hover:text-foreground">
                 <X size={20} />

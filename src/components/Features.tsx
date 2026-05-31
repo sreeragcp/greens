@@ -58,7 +58,7 @@ export function Features() {
           </div>
 
           <div className="order-1 lg:order-2 text-center lg:text-left">
-            <p className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">Why Greens</p>
+            <p className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">Why Mark One</p>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight">
               Everything you need for{" "}
               <span className="gradient-text">school ID management</span>

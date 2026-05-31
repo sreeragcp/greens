@@ -9,12 +9,14 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { teacherSidebar } from "@/lib/nav";
+import { handleGetTeacherDetails, createStudent, getTeacherStudents, updateStudent } from "@/service/teacher";
 
 export const Route = createFileRoute("/teacher")({
   component: TeacherPortal,
 });
 
 type TeacherProfile = {
+  schoolId?: string | number;
   schoolName: string;
   teacherName: string;
   classGrade: string;
@@ -52,13 +54,67 @@ function TeacherPortal() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("greens.teacherProfile");
-      if (raw) setProfile(JSON.parse(raw) as TeacherProfile);
-    } catch {
-      // ignore
-    }
-    setLoaded(true);
+    let isMounted = true;
+
+    const loadLocalProfile = () => {
+      try {
+        const raw = localStorage.getItem("markone.teacherProfile");
+        if (raw) {
+          const parsed = JSON.parse(raw) as TeacherProfile;
+          if (isMounted) setProfile(parsed);
+        }
+      } catch {
+        // ignore invalid localStorage data
+      } finally {
+        if (isMounted) setLoaded(true);
+      }
+    }; 
+
+    const fetchTeacherProfile = async () => {
+      try {
+        const res = await handleGetTeacherDetails();
+        const data = res?.data || res || {};
+        const teacher = data.teacher || data.profile || data;
+        const profileData =
+          data.teacher_profile ||
+          (Array.isArray(data.teacher_assignments) && data.teacher_assignments[0]) ||
+          teacher ||
+          {};
+
+        const normalizedProfile: TeacherProfile = {
+          schoolId:
+            profileData.school || profileData.school_id || profileData.schoolId || "",
+          schoolName:
+            profileData.school_name || profileData.schoolName || teacher.schoolName || teacher.school || "",
+          teacherName:
+            `${teacher.first_name || ""} ${teacher.last_name || ""}`.trim() ||
+            teacher.username ||
+            teacher.name ||
+            teacher.teacherName ||
+            "",
+          classGrade:
+            profileData.class_name || profileData.className || profileData.class || teacher.class || teacher.classGrade || "",
+          division:
+            profileData.division || profileData.div || "",
+          mobile: teacher.phone || teacher.mobile || "",
+          email: teacher.email || teacher.emailAddress || teacher.username || "",
+        };
+
+        if (isMounted && (normalizedProfile.schoolName || normalizedProfile.teacherName || normalizedProfile.classGrade)) {
+          setProfile(normalizedProfile);
+          localStorage.setItem("markone.teacherProfile", JSON.stringify(normalizedProfile));
+        }
+      } catch (error) {
+        console.error("Error fetching teacher details:", error);
+      }
+    };
+
+    loadLocalProfile();
+    fetchTeacherProfile();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (!loaded) return null;
@@ -95,10 +151,7 @@ function RegistrationRequired() {
 }
 
 function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
-  const myStudents = dummyStudents.filter(
-    (s) => s.class === profile.classGrade && s.division === profile.division
-  );
-  const [students, setStudents] = useState<StudentEntry[]>(myStudents);
+  const [students, setStudents] = useState<StudentEntry[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState<StudentEntry | null>(null);
   const [viewingStudent, setViewingStudent] = useState<StudentEntry | null>(null);
@@ -123,20 +176,100 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
     { label: "Approved", value: String(students.filter(s => s.status === "Teacher Approved").length), color: "text-emerald-400" },
   ];
 
-  const handleSaveStudent = (student: StudentEntry) => {
+  const handleSaveStudent = async (student: StudentEntry) => {
     const scoped = { ...student, class: profile.classGrade, division: profile.division };
+
     if (editingStudent) {
-      setStudents(students.map(s => s.id === scoped.id ? scoped : s));
-      toast.success(`Updated ${scoped.name}`);
+      try {
+        const apiResponse = await updateStudent(editingStudent.id, {
+          full_name: scoped.name,
+          school: profile.schoolId || profile.schoolName || "",
+          guardian_phone: scoped.parentMobile,
+          class_name: scoped.class,
+          division: scoped.division,
+          photo: scoped.photo,
+        });
+
+        if (apiResponse?.id) {
+          scoped.id = apiResponse.id;
+        }
+
+        setStudents(students.map(s => s.id === scoped.id ? scoped : s));
+        toast.success(`Updated ${scoped.name}`);
+      } catch (error: any) {
+        console.error(`Update student failed for ${editingStudent.id}:`, error);
+        toast.error("Unable to update student on server. Please try again.");
+      }
     } else {
-      setStudents([...students, { ...scoped, id: Date.now() }]);
-      toast.success(`Added ${scoped.name}`, {
-        description: scoped.status === "Sent to Parent" ? "OTP link sent to parent." : "Saved as draft.",
-      });
+      try {
+        const apiResponse = await createStudent({
+          full_name: scoped.name,
+          school: profile.schoolId || profile.schoolName || "",
+          guardian_phone: scoped.parentMobile,
+          class_name: scoped.class,
+          division: scoped.division,
+          photo: scoped.photo,
+        });
+
+        if (apiResponse?.id) {
+          scoped.id = apiResponse.id;
+        }
+
+        toast.success(`Saved ${scoped.name} to server`, {
+          description: scoped.status === "Sent to Parent" ? "OTP link sent to parent." : "Saved as draft.",
+        });
+      } catch (error: any) {
+        console.error("Create student failed:", error);
+        toast.error("Unable to save student to server. Please try again.");
+      }
+
+      setStudents([...students, { ...scoped, id: scoped.id || Date.now() }]);
     }
+
     setShowAddForm(false);
     setEditingStudent(null);
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const loadStudents = async () => {
+      try {
+        const res = await getTeacherStudents();
+        const items = Array.isArray(res)
+          ? res
+          : Array.isArray(res?.results)
+            ? res.results
+            : Array.isArray(res?.data?.results)
+              ? res.data.results
+              : res?.data || [];
+
+        const mapped: StudentEntry[] = items.map((s: any) => ({
+          id: s.id,
+          name: s.full_name || s.name || s.student_name || "",
+          admissionNo: s.admission_no || s.admissionNo || "",
+          class: s.class_name || s.class || s.className || "",
+          division: s.division || s.div || "",
+          dob: s.dob || s.date_of_birth || s.dob_string || "",
+          bloodGroup: s.blood_group || s.bloodGroup || "",
+          gender: s.gender || "",
+          parentName: s.parent_name || s.guardian_name || s.parentName || "",
+          parentMobile: s.guardian_phone || s.parent_mobile || s.parentMobile || "",
+          address: s.address || "",
+          emergencyContact: s.emergency_contact || s.emergencyContact || "",
+          photo: s.photo || null,
+          status: s.status || "Draft",
+        }));
+
+        if (mounted) setStudents(mapped);
+      } catch (err: any) {
+        console.error("Failed to load students:", err);
+        toast.error("Unable to load students");
+      }
+    };
+
+    loadStudents();
+    return () => { mounted = false; };
+  }, []);
 
   const handleApprove = (id: number) => {
     const student = students.find((s) => s.id === id);

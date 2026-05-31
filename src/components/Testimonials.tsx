@@ -7,7 +7,7 @@ const testimonials = [
   {
     name: "Priya Sharma",
     role: "Principal, DPS Noida",
-    text: "Greens has revolutionized our ID card process. What used to take weeks now takes days with perfect accuracy.",
+    text: "Mark One has revolutionized our ID card process. What used to take weeks now takes days with perfect accuracy.",
     avatar: avatarPrincipal,
   },
   {
@@ -34,7 +34,7 @@ export function Testimonials() {
             Trusted by <span className="gradient-text">educators everywhere</span>
           </h2>
           <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
-            Real stories from principals, teachers, and parents using Greens every day.
+            Real stories from principals, teachers, and parents using Mark One every day.
           </p>
         </div>
 
