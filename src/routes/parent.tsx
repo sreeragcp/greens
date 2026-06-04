@@ -6,7 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Eye, Edit, Check, X, Camera, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import { parentSidebar } from "@/lib/nav";
+import {
+  getStatusBadgeClass,
+  getStatusLabel,
+  normalizeStudentStatus,
+  type StudentWorkflowStatus,
+} from "@/lib/student-status";
 import { getParentStudents, patchParentStudent } from "@/service/parent";
 
 export const Route = createFileRoute("/parent")({
@@ -28,33 +35,22 @@ type StudentData = {
   emergencyContact: string;
   photo: string | null;
   schoolName: string;
-  status: "Sent to Parent" | "Parent Confirmed" | "Teacher Approved";
+  status: StudentWorkflowStatus;
   createdAt?: string;
 };
 
-// Dummy data: students linked to the logged-in parent's mobile
-const dummyStudents: StudentData[] = [
-  {
-    id: 1, name: "Arjun Sharma", admissionNo: "ADM-101", class: "5", division: "A",
-    dob: "2015-06-10", bloodGroup: "B+", gender: "Male", parentName: "Rajesh Sharma",
-    parentMobile: "+91 98765 43210", address: "B-45, Sector 62, Noida",
-    emergencyContact: "+91 98765 43211", photo: null, schoolName: "Delhi Public School",
-    status: "Sent to Parent",
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 2, name: "Priya Sharma", admissionNo: "ADM-102", class: "3", division: "B",
-    dob: "2017-09-25", bloodGroup: "A+", gender: "Female", parentName: "Rajesh Sharma",
-    parentMobile: "+91 98765 43210", address: "B-45, Sector 62, Noida",
-    emergencyContact: "+91 98765 43211", photo: null, schoolName: "Delhi Public School",
-    status: "Teacher Approved",
-  },
-];
+type ConfirmState = {
+  title: string;
+  description: string;
+  onConfirm: () => Promise<void>;
+};
 
 function ParentDashboard() {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [editingStudent, setEditingStudent] = useState<StudentData | null>(null);
   const [viewingStudent, setViewingStudent] = useState<StudentData | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const isWithinEditWindow = (student: StudentData) => {
     if (!student.createdAt) return true;
@@ -64,17 +60,45 @@ function ParentDashboard() {
     return diffMs <= 7 * 24 * 60 * 60 * 1000;
   };
 
-  const canEdit = (s: StudentData) => isWithinEditWindow(s);
-  const canConfirm = (s: StudentData) => s.status === "Sent to Parent";
+  const canEdit = (s: StudentData) => s.status === "PENDING_PARENT" && isWithinEditWindow(s);
+  const canSendToTeacher = (s: StudentData) => s.status === "PENDING_PARENT";
 
-  const handleConfirm = (id: number) => {
-    const child = students.find((s) => s.id === id);
-    setStudents(students.map(s => s.id === id ? { ...s, status: "Parent Confirmed" as const } : s));
-    if (child) {
-      toast.success(`Confirmed ${child.name}'s details`, {
-        description: "Sent to teacher for approval.",
-      });
+  const showConfirm = (title: string, description: string, onConfirm: () => Promise<void>) => {
+    setConfirmState({ title, description, onConfirm });
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmState) return;
+    try {
+      await confirmState.onConfirm();
+    } catch (error: any) {
+      console.error("Action failed:", error);
+      toast.error("Unable to complete this action. Please try again.");
+    } finally {
+      setConfirmOpen(false);
+      setConfirmState(null);
     }
+  };
+
+  const handleSendToTeacher = (id: number) => {
+    const child = students.find((s) => s.id === id);
+    if (!child) return;
+
+    showConfirm(
+      "Send to teacher",
+      `Confirm ${child.name}'s details and send to the teacher for approval?`,
+      async () => {
+        await patchParentStudent(id, { status: "PENDING_TEACHER" });
+        setStudents(students.map(s => s.id === id ? { ...s, status: "PENDING_TEACHER" as const } : s));
+        if (viewingStudent?.id === id) {
+          setViewingStudent({ ...child, status: "PENDING_TEACHER" });
+        }
+        toast.success(`Sent ${child.name} to teacher`, {
+          description: "Verification is completed on your side.",
+        });
+      }
+    );
   };
 
   useEffect(() => {
@@ -105,7 +129,7 @@ function ParentDashboard() {
           emergencyContact: s.emergency_contact || s.emergencyContact || "",
           photo: s.photo || null,
           schoolName: s.school_name || s.schoolName || "",
-          status: s.status || "Sent to Parent",
+          status: normalizeStudentStatus(s.status),
           createdAt: s.created_at || s.createdAt || undefined,
         }));
 
@@ -113,7 +137,6 @@ function ParentDashboard() {
       } catch (err: any) {
         console.error("Failed to load parent students:", err);
         toast.error("Unable to load student list");
-        if (mounted) setStudents(dummyStudents);
       }
     };
 
@@ -155,7 +178,7 @@ function ParentDashboard() {
         {/* Info Banner */}
         <div className="rounded-xl bg-primary/10 border border-primary/20 p-4">
           <p className="text-sm text-primary">
-            👋 Welcome! Below are the student details entered by the school. Please review, edit if needed, and confirm.
+            👋 Welcome! Review your child's details entered by the school. When ready, send to the teacher for approval.
           </p>
         </div>
 
@@ -207,15 +230,18 @@ function ParentDashboard() {
               ))}
             </div>
 
-            {canConfirm(viewingStudent) && (
+            {canSendToTeacher(viewingStudent) && (
               <div className="flex justify-end gap-3">
                 <Button variant="heroOutline" size="sm" onClick={() => setEditingStudent(viewingStudent)}>
                   <Edit size={14} /> Edit Details
                 </Button>
-                <Button variant="hero" size="sm" onClick={() => { handleConfirm(viewingStudent.id); setViewingStudent(null); }}>
-                  <Check size={14} /> Confirm Details
+                <Button variant="hero" size="sm" onClick={() => handleSendToTeacher(viewingStudent.id)}>
+                  <Check size={14} /> Send to Teacher
                 </Button>
               </div>
+            )}
+            {viewingStudent.status === "PENDING_TEACHER" && (
+              <p className="text-sm text-emerald-400 text-right">Verification is completed.</p>
             )}
           </div>
         )}
@@ -241,13 +267,10 @@ function ParentDashboard() {
                     <Edit size={14} /> Edit
                   </Button>
                 ) : (
-                  <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
-                    student.status === "Sent to Parent" ? "bg-yellow-500/10 text-yellow-400" :
-                    student.status === "Parent Confirmed" ? "bg-blue-500/10 text-blue-400" :
-                    "bg-emerald-500/10 text-emerald-400"
-                  }`}>
-                    {student.status === "Sent to Parent" ? "Review Pending" :
-                     student.status === "Parent Confirmed" ? "Confirmed" : "Approved"}
+                  <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClass(student.status)}`}>
+                    {student.status === "PENDING_TEACHER"
+                      ? "Verification completed"
+                      : getStatusLabel(student.status)}
                   </span>
                 )}
               </div>
@@ -255,18 +278,32 @@ function ParentDashboard() {
                 <Button variant="outline" size="sm" onClick={() => setViewingStudent(student)}>
                   <Eye size={14} /> View Details
                 </Button>
-                {student.status === "Sent to Parent" && !isWithinEditWindow(student) && (
+                {student.status === "PENDING_PARENT" && !isWithinEditWindow(student) && (
                   <span className="text-xs text-muted-foreground">Edit window expired after 7 days</span>
                 )}
-                {canConfirm(student) && (
-                  <Button variant="hero" size="sm" onClick={() => handleConfirm(student.id)}>
-                    <Check size={14} /> Confirm
+                {canSendToTeacher(student) && (
+                  <Button variant="hero" size="sm" onClick={() => handleSendToTeacher(student.id)}>
+                    <Check size={14} /> Send to Teacher
                   </Button>
+                )}
+                {student.status === "PENDING_TEACHER" && (
+                  <span className="text-xs text-emerald-400">Verification is completed</span>
                 )}
               </div>
             </div>
           ))}
         </div>
+
+        <ConfirmActionDialog
+          open={confirmOpen}
+          onOpenChange={(open) => {
+            setConfirmOpen(open);
+            if (!open) setConfirmState(null);
+          }}
+          title={confirmState?.title || "Confirm action"}
+          description={confirmState?.description || "Are you sure you want to proceed?"}
+          onConfirm={handleConfirmAction}
+        />
       </div>
     </DashboardLayout>
   );

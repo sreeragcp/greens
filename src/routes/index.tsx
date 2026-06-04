@@ -17,7 +17,7 @@ function Index() {
       <Hero />
       <Features />
       <TemplateShowcase />
-      <Testimonials />
+      {/* <Testimonials /> */}
       <Footer />
     </div>
   );

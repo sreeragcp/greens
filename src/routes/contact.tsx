@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Mail, Phone, MapPin } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/contact")({
@@ -14,12 +14,29 @@ export const Route = createFileRoute("/contact")({
 
 function ContactPage() {
   const formRef = useRef<HTMLFormElement>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    toast.success("Message sent!", {
-      description: "We'll get back to you within 24 hours.",
+
+    const recipient = "advertising@markone.website";
+    const mailSubject = subject || "New message from website";
+    const body = `Name: ${name}\nEmail: ${email}\n\n${message}`;
+    const mailto = `mailto:${recipient}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(body)}`;
+
+    window.location.href = mailto;
+
+    toast.success("Email draft opened.", {
+      description: "Please send the message from your email app.",
     });
+
+    setName("");
+    setEmail("");
+    setSubject("");
+    setMessage("");
     formRef.current?.reset();
   };
 
@@ -36,7 +53,7 @@ function ContactPage() {
           <div className="grid gap-8 lg:grid-cols-2">
             <div className="space-y-6">
               {[
-                { icon: Mail, label: "Email", value: "contact@markone.in" },
+                { icon: Mail, label: "Email", value: "advertising@markone.website" },
                 { icon: Phone, label: "Phone", value: "+91 98765 43210" },
                 { icon: MapPin, label: "Address", value: "New Delhi, India" },
               ].map((item) => (
@@ -57,22 +74,40 @@ function ContactPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Name</Label>
-                    <Input placeholder="Your name" className="bg-surface border-border" />
+                    <Input
+                      placeholder="Your name"
+                      className="bg-surface border-border"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label>Email</Label>
-                    <Input type="email" placeholder="you@example.com" className="bg-surface border-border" />
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      className="bg-surface border-border"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Subject</Label>
-                  <Input placeholder="How can we help?" className="bg-surface border-border" />
+                  <Input
+                    placeholder="How can we help?"
+                    className="bg-surface border-border"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Message</Label>
                   <textarea
                     rows={4}
                     placeholder="Tell us more..."
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
                     className="flex w-full rounded-md border border-border bg-surface px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
                   />
                 </div>

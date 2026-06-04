@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Outlet, useLocation } from "@tanstack/react-router";
 import { useEffect, useMemo, useState,useRef} from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,18 @@ import {
   Upload,
   FileText,
   ChevronRight,
+  ThumbsUp,
+  XCircle,
 } from "lucide-react";
 import { adminSidebar } from "@/lib/nav";
-import { getAdminDashboard, getStudents, getSchools, getSchoolClasses } from "@/service/admin";
+import { getAdminDashboard, getStudents, getSchools, getSchoolClasses, patchStudentStatus } from "@/service/admin";
+import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
+import {
+  getStatusBadgeClass,
+  getStatusLabel,
+  normalizeStudentStatus,
+  type StudentWorkflowStatus,
+} from "@/lib/student-status";
 import {
   Dialog,
   DialogContent,
@@ -81,7 +90,7 @@ type StudentRecord = {
   address: string;
   emergencyContact: string;
   photo: string | null;
-  status: string;
+  status: StudentWorkflowStatus;
   school: string;
 };
 
@@ -114,20 +123,21 @@ const defaultClassesBySchool: Record<number, ClassCard[]> = {
 
 const defaultStudentsByClass: Record<number, StudentRecord[]> = {
   101: [
-    { id: 1, name: "Rahul Verma", admissionNo: "ADM-001", class: "5", division: "A", dob: "2012-03-15", bloodGroup: "B+", gender: "Male", parentName: "Suresh Verma", parentMobile: "+91 98765 43210", address: "B-45, Sector 62, Noida", emergencyContact: "+91 98765 43211", photo: null, status: "Teacher Approved", school: "DPS Noida" },
-    { id: 2, name: "Sneha Patel", admissionNo: "ADM-002", class: "5", division: "A", dob: "2012-08-21", bloodGroup: "A+", gender: "Female", parentName: "Ramesh Patel", parentMobile: "+91 87654 32109", address: "C-12, Vasant Kunj, Delhi", emergencyContact: "+91 87654 32110", photo: null, status: "Teacher Approved", school: "DPS Noida" },
+    { id: 1, name: "Rahul Verma", admissionNo: "ADM-001", class: "5", division: "A", dob: "2012-03-15", bloodGroup: "B+", gender: "Male", parentName: "Suresh Verma", parentMobile: "+91 98765 43210", address: "B-45, Sector 62, Noida", emergencyContact: "+91 98765 43211", photo: null, status: "APPROVED", school: "DPS Noida" },
+    { id: 2, name: "Sneha Patel", admissionNo: "ADM-002", class: "5", division: "A", dob: "2012-08-21", bloodGroup: "A+", gender: "Female", parentName: "Ramesh Patel", parentMobile: "+91 87654 32109", address: "C-12, Vasant Kunj, Delhi", emergencyContact: "+91 87654 32110", photo: null, status: "APPROVED", school: "DPS Noida" },
   ],
   102: [
-    { id: 3, name: "Amit Kumar", admissionNo: "ADM-003", class: "6", division: "B", dob: "2011-11-05", bloodGroup: "O+", gender: "Male", parentName: "Manoj Kumar", parentMobile: "+91 76543 21098", address: "D-8, Dwarka, Delhi", emergencyContact: "+91 76543 21099", photo: null, status: "Teacher Approved", school: "DPS Noida" },
-    { id: 4, name: "Priya Singh", admissionNo: "ADM-004", class: "6", division: "B", dob: "2011-05-19", bloodGroup: "AB+", gender: "Female", parentName: "Rakesh Singh", parentMobile: "+91 99887 76655", address: "A-22, Indirapuram, Ghaziabad", emergencyContact: "+91 99887 76656", photo: null, status: "Teacher Approved", school: "DPS Noida" },
+    { id: 3, name: "Amit Kumar", admissionNo: "ADM-003", class: "6", division: "B", dob: "2011-11-05", bloodGroup: "O+", gender: "Male", parentName: "Manoj Kumar", parentMobile: "+91 76543 21098", address: "D-8, Dwarka, Delhi", emergencyContact: "+91 76543 21099", photo: null, status: "APPROVED", school: "DPS Noida" },
+    { id: 4, name: "Priya Singh", admissionNo: "ADM-004", class: "6", division: "B", dob: "2011-05-19", bloodGroup: "AB+", gender: "Female", parentName: "Rakesh Singh", parentMobile: "+91 99887 76655", address: "A-22, Indirapuram, Ghaziabad", emergencyContact: "+91 99887 76656", photo: null, status: "APPROVED", school: "DPS Noida" },
   ],
   201: [
-    { id: 5, name: "Karan Mehta", admissionNo: "ADM-005", class: "6", division: "A", dob: "2013-09-12", bloodGroup: "B-", gender: "Male", parentName: "Vinod Mehta", parentMobile: "+91 91234 56789", address: "Plot 14, Sector 18, Gurugram", emergencyContact: "+91 91234 56790", photo: null, status: "Teacher Approved", school: "Green Valley School" },
+    { id: 5, name: "Karan Mehta", admissionNo: "ADM-005", class: "6", division: "A", dob: "2013-09-12", bloodGroup: "B-", gender: "Male", parentName: "Vinod Mehta", parentMobile: "+91 91234 56789", address: "Plot 14, Sector 18, Gurugram", emergencyContact: "+91 91234 56790", photo: null, status: "APPROVED", school: "Green Valley School" },
   ],
 };
 
 function AdminDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [query, setQuery] = useState("");
   const [statsData, setStatsData] = useState(stats);
   const [activityData, setActivityData] = useState(recentActivity);
@@ -146,6 +156,13 @@ function AdminDashboard() {
   const [allStudents, setAllStudents] = useState<StudentRecord[] | null>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    description: string;
+    onConfirm: () => Promise<void>;
+    destructive?: boolean;
+  } | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const classCards = schoolClassCards;
 
@@ -157,6 +174,59 @@ function AdminDashboard() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     navigate({ to: "/admin/students" });
+  };
+
+  const showConfirm = (
+    title: string,
+    description: string,
+    onConfirm: () => Promise<void>,
+    destructive = false
+  ) => {
+    setConfirmState({ title, description, onConfirm, destructive });
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmState) return;
+    try {
+      await confirmState.onConfirm();
+    } catch (error: any) {
+      console.error("Action failed:", error);
+      toast.error("Unable to complete this action. Please try again.");
+    } finally {
+      setConfirmOpen(false);
+      setConfirmState(null);
+    }
+  };
+
+  const updateStudentInLists = (updated: StudentRecord) => {
+    setSelectedStudent(updated);
+    setClassStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+  };
+
+  const handleAdminApprove = (student: StudentRecord) => {
+    showConfirm(
+      "Approve student",
+      `Approve ${student.name} and mark the application as fully approved?`,
+      async () => {
+        await patchStudentStatus(student.id, "APPROVED");
+        updateStudentInLists({ ...student, status: "APPROVED" });
+        toast.success(`${student.name} approved`);
+      }
+    );
+  };
+
+  const handleAdminReject = (student: StudentRecord) => {
+    showConfirm(
+      "Reject student",
+      `Reject ${student.name} and send back to the teacher for review?`,
+      async () => {
+        await patchStudentStatus(student.id, "PENDING_TEACHER");
+        updateStudentInLists({ ...student, status: "PENDING_TEACHER" });
+        toast.success(`${student.name} sent back to teacher`);
+      },
+      true
+    );
   };
 
   const handleSchoolSelect = async (school: SchoolCard) => {
@@ -241,7 +311,7 @@ function AdminDashboard() {
         address: student.address || "",
         emergencyContact: student.emergency_contact || student.emergencyContact || "",
         photo: student.photo || null,
-        status: student.status || "Registered",
+        status: normalizeStudentStatus(student.status),
         school: selectedSchool?.name || "",
       }));
 
@@ -381,6 +451,10 @@ function AdminDashboard() {
     }
   }, [selectedSchool, selectedClass, selectedStudent]);
 
+  if (location.pathname !== "/admin") {
+    return <Outlet />;
+  }
+
   return (
     <DashboardLayout title="Admin Dashboard" role="Admin" items={adminSidebar}>
       <div className="space-y-6">
@@ -412,7 +486,7 @@ function AdminDashboard() {
         {/* Removed monthly chart and recent activity to focus on drilldown */}
 
         {/* Quick search */}
-        <form onSubmit={handleSearch} className="glass-card rounded-xl p-4 sm:p-6">
+        {/* <form onSubmit={handleSearch} className="glass-card rounded-xl p-4 sm:p-6">
           <h2 className="text-lg font-semibold mb-4">Quick Search</h2>
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
@@ -426,7 +500,7 @@ function AdminDashboard() {
             </div>
             <Button type="submit" variant="hero" size="default">Search</Button>
           </div>
-        </form>
+        </form> */}
 
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -590,8 +664,10 @@ function AdminDashboard() {
               <AdminStudentDetail
                 student={selectedStudent}
                 onClose={() => setSelectedStudent(null)}
-                onSave={(student) => { setSelectedStudent(student); toast.success("Student details updated"); }}
+                onSave={(student) => { updateStudentInLists(student); toast.success("Student details updated"); }}
                 onShowIdCard={() => setShowIdCard(true)}
+                onApprove={() => handleAdminApprove(selectedStudent)}
+                onReject={() => handleAdminReject(selectedStudent)}
               />
             )}
           </DialogContent>
@@ -640,6 +716,20 @@ function AdminDashboard() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ConfirmActionDialog
+          open={confirmOpen}
+          onOpenChange={(open) => {
+            setConfirmOpen(open);
+            if (!open) setConfirmState(null);
+          }}
+          title={confirmState?.title || "Confirm action"}
+          description={confirmState?.description || "Are you sure you want to proceed?"}
+          confirmLabel="Yes"
+          cancelLabel="No"
+          destructive={confirmState?.destructive}
+          onConfirm={handleConfirmAction}
+        />
       </div>
     </DashboardLayout>
   );
@@ -650,11 +740,15 @@ function AdminStudentDetail({
   onClose,
   onSave,
   onShowIdCard,
+  onApprove,
+  onReject,
 }: {
   student: StudentRecord;
   onClose: () => void;
   onSave: (student: StudentRecord) => void;
   onShowIdCard: () => void;
+  onApprove: () => void;
+  onReject: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ ...student });
@@ -678,6 +772,11 @@ function AdminStudentDetail({
 
       {!editing ? (
         <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <span className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClass(student.status)}`}>
+              {getStatusLabel(student.status)}
+            </span>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             {[
               ["Admission No", student.admissionNo],
@@ -695,10 +794,20 @@ function AdminStudentDetail({
               </div>
             ))}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setEditing(true)}>
               <Edit size={14} /> Edit
             </Button>
+            {student.status === "PENDING_ADMIN" && (
+              <>
+                <Button variant="outline" className="text-destructive border-destructive/30" onClick={onReject}>
+                  <XCircle size={14} /> Reject
+                </Button>
+                <Button variant="hero" onClick={onApprove}>
+                  <ThumbsUp size={14} /> Approve
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </div>
       ) : (

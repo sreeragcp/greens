@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { toast } from "sonner";
 import {
@@ -118,11 +118,53 @@ function LoginPage() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const navigate = useNavigate();
 
+  const [resendTimer, setResendTimer] = useState(0);
+
   const handleRoleChange = (id: Role) => {
     setSelectedRole(id);
     setStep("phone");
     setOtp(["", "", "", "", "", ""]);
   };
+
+  const startResendCountdown = () => setResendTimer(300);
+
+  const handleResendOtp = async () => {
+    if (!phoneNumber || resendTimer > 0) return;
+
+    try {
+      const res = await handleLogin(phoneNumber, selectedRole.toUpperCase());
+      const success =
+        res === true || res?.status === true || res?.success === true;
+
+      if (success) {
+        toast.success(`OTP resent to ${phoneNumber}`, {
+          description: "Please check your phone for the new code.",
+        });
+        startResendCountdown();
+      } else {
+        toast.error(
+          res?.error || res?.message || "Unable to resend OTP. Please try again.",
+        );
+      }
+    } catch (error: any) {
+      const msg =
+        error?.error ||
+        error?.message ||
+        (error && JSON.stringify(error)) ||
+        "Unable to resend OTP. Please try again.";
+      toast.error(msg);
+    }
+  };
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+
+    const interval = window.setInterval(() => {
+      setResendTimer((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [resendTimer]);
 
   const handleOtpChange = (index: number, value: string) => {
     if (value.length > 1) return;
@@ -311,6 +353,7 @@ function LoginPage() {
                               "Use any 6 digits to continue (demo mode).",
                           });
                           setStep("otp");
+                          startResendCountdown();
                         } else {
                           toast.error(
                             "Unable to send OTP for this role. Please try again.",
@@ -353,14 +396,13 @@ function LoginPage() {
                       Didn't receive?{" "}
                       <button
                         type="button"
-                        className="text-primary hover:underline"
-                        onClick={() =>
-                          toast.success(
-                            `OTP resent to ${phoneNumber || "your mobile"}`,
-                          )
-                        }
+                        className={`text-primary ${resendTimer > 0 ? "opacity-50 cursor-not-allowed" : "hover:underline"}`}
+                        onClick={handleResendOtp}
+                        disabled={resendTimer > 0}
                       >
-                        Resend OTP
+                        {resendTimer > 0
+                          ? `Resend OTP (${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, "0")})`
+                          : "Resend OTP"}
                       </button>
                     </p>
                   </div>
@@ -406,7 +448,7 @@ function LoginPage() {
 
                         if (!success) {
                           toast.error(
-                            "OTP verification failed. Please try again.",
+                            res?.error || res?.message || "OTP verification failed. Please try again.",
                           );
                           return;
                         }
@@ -481,6 +523,7 @@ function LoginPage() {
                         navigate({ to: currentRole.redirect });
                       } catch (err: any) {
                         const msg =
+                          err?.error ||
                           err?.message ||
                           (err && JSON.stringify(err)) ||
                           "OTP verification failed";

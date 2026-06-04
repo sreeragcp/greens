@@ -13,11 +13,20 @@ import {
 } from "@/components/ui/dialog";
 import {
   School, Search, Eye, Edit, Camera, Upload, ChevronDown, ChevronRight,
-  User as UserIcon,
+  User as UserIcon, ThumbsUp, XCircle, Download as DownloadIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
+import { jsPDF } from "jspdf";
 import { adminSidebar } from "@/lib/nav";
+import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
+import {
+  getStatusBadgeClass,
+  getStatusLabel,
+  normalizeStudentStatus,
+  type StudentWorkflowStatus,
+} from "@/lib/student-status";
+import { getStudents, patchStudentStatus } from "@/service/admin";
 
 export const Route = createFileRoute("/admin/students")({
   component: AdminStudents,
@@ -39,27 +48,208 @@ type Student = {
   photo: string | null;
   school: string;
   uploadedBy: string;
-  status: "Sent to Parent" | "Parent Confirmed" | "Teacher Approved";
+  status: StudentWorkflowStatus;
 };
 
-const dummyStudents: Student[] = [
-  { id: 1, name: "Rahul Verma", admissionNo: "ADM-001", class: "8", division: "A", dob: "2012-03-15", bloodGroup: "B+", gender: "Male", parentName: "Suresh Verma", parentMobile: "+91 98765 43210", address: "B-45, Sector 62, Noida", emergencyContact: "+91 98765 43211", photo: null, school: "DPS Noida", uploadedBy: "Mrs. Anjali Sharma", status: "Teacher Approved" },
-  { id: 2, name: "Sneha Patel", admissionNo: "ADM-002", class: "6", division: "B", dob: "2014-07-22", bloodGroup: "A+", gender: "Female", parentName: "Ramesh Patel", parentMobile: "+91 87654 32109", address: "C-12, Vasant Kunj, Delhi", emergencyContact: "+91 87654 32110", photo: null, school: "DPS Noida", uploadedBy: "Mr. Rajeev Khanna", status: "Teacher Approved" },
-  { id: 3, name: "Amit Kumar", admissionNo: "ADM-003", class: "10", division: "A", dob: "2010-11-05", bloodGroup: "O+", gender: "Male", parentName: "Manoj Kumar", parentMobile: "+91 76543 21098", address: "D-8, Dwarka, Delhi", emergencyContact: "+91 76543 21099", photo: null, school: "Green Valley School", uploadedBy: "Mrs. Sunita Rao", status: "Teacher Approved" },
-  { id: 4, name: "Priya Singh", admissionNo: "ADM-004", class: "9", division: "C", dob: "2011-05-19", bloodGroup: "AB+", gender: "Female", parentName: "Rakesh Singh", parentMobile: "+91 99887 76655", address: "A-22, Indirapuram, Ghaziabad", emergencyContact: "+91 99887 76656", photo: null, school: "DPS Noida", uploadedBy: "Mrs. Anjali Sharma", status: "Teacher Approved" },
-  { id: 5, name: "Karan Mehta", admissionNo: "ADM-005", class: "7", division: "A", dob: "2013-09-12", bloodGroup: "B-", gender: "Male", parentName: "Vinod Mehta", parentMobile: "+91 91234 56789", address: "Plot 14, Sector 18, Gurugram", emergencyContact: "+91 91234 56790", photo: null, school: "Green Valley School", uploadedBy: "Mr. Devesh Iyer", status: "Teacher Approved" },
-  { id: 6, name: "Ananya Iyer", admissionNo: "ADM-006", class: "5", division: "B", dob: "2015-02-08", bloodGroup: "O-", gender: "Female", parentName: "Suresh Iyer", parentMobile: "+91 90909 80808", address: "Flat 302, Powai, Mumbai", emergencyContact: "+91 90909 80809", photo: null, school: "St. Xavier's International", uploadedBy: "Mrs. Maria D'Souza", status: "Teacher Approved" },
-];
+type ConfirmState = {
+  title: string;
+  description: string;
+  onConfirm: () => Promise<void>;
+  destructive?: boolean;
+};
+
+const getImageFormatFromDataUrl = (dataUrl: string) => {
+  const mimeMatch = dataUrl.match(/^data:(image\/[^;]+);/);
+  if (!mimeMatch) return "JPEG";
+  const mime = mimeMatch[1].toLowerCase();
+  if (mime.includes("png")) return "PNG";
+  if (mime.includes("jpeg") || mime.includes("jpg")) return "JPEG";
+  if (mime.includes("webp")) return "WEBP";
+  return "JPEG";
+};
+
+const fetchImageAsDataUrl = async (imageSrc: string) => {
+  if (imageSrc.startsWith("data:")) {
+    return imageSrc;
+  }
+
+  const loadViaFetch = async () => {
+    const response = await fetch(imageSrc, { mode: "cors" });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+        } else {
+          reject(new Error("Unable to convert image to data URL"));
+        }
+      };
+      reader.onerror = () => reject(reader.error ?? new Error("FileReader error while converting image"));
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const loadViaImage = async () => {
+    return await new Promise<string>((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Failed to create canvas context"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = (err) => reject(new Error("Failed to load image for PDF conversion"));
+      img.src = imageSrc;
+    });
+  };
+
+  try {
+    return await loadViaFetch();
+  } catch (fetchError) {
+    console.warn("Fetch failed for image URL, retrying with image loader:", fetchError);
+    return await loadViaImage();
+  }
+};
+
+const mapStudent = (s: any): Student => {
+  const parentName = s.parent_name || s.guardian_name || [s.father_name, s.mother_name].filter(Boolean).join(" / ") || s.parent_detail?.first_name || "";
+  const schoolName = s.school_detail?.name || s.school_name || s.school || "";
+  const admissionNo = s.admission_no || s.roll_no || s.admissionNo || s.id?.toString() || "";
+  const address = s.address || [s.city, s.state, s.pincode].filter(Boolean).join(", ") || "";
+  const uploadedBy = s.uploaded_by || s.teacher_name || s.created_by_detail?.first_name || "—";
+
+  return {
+    id: s.id,
+    name: s.full_name || `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.name || "",
+    admissionNo,
+    class: s.class_name || s.class || "",
+    division: s.division || s.div || "",
+    dob: s.date_of_birth || s.dob || "",
+    bloodGroup: s.blood_group || s.bloodGroup || "",
+    gender: s.gender || "",
+    parentName,
+    parentMobile: s.guardian_phone || s.parent_mobile || s.parent_detail?.phone || "",
+    address,
+    emergencyContact: s.emergency_contact || s.emergencyContact || "",
+    photo: s.photo || null,
+    school: schoolName,
+    uploadedBy,
+    status: normalizeStudentStatus(s.status),
+  };
+};
 
 function AdminStudents() {
-  const [students, setStudents] = useState<Student[]>(dummyStudents);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [schoolFilter, setSchoolFilter] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [divisionFilter, setDivisionFilter] = useState("");
   const [selected, setSelected] = useState<Student | null>(null);
   const [editing, setEditing] = useState(false);
   const [openSchools, setOpenSchools] = useState<Record<string, boolean>>({});
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const pdfContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadStudents = async () => {
+      setLoading(true);
+      try {
+        const res = await getStudents();
+        const items = Array.isArray(res)
+          ? res
+          : Array.isArray(res?.results)
+            ? res.results
+            : Array.isArray(res?.data?.results)
+              ? res.data.results
+              : res?.data || [];
+        if (mounted) setStudents(items.map(mapStudent));
+      } catch (err) {
+        console.error("Failed to load students:", err);
+        toast.error("Unable to load students");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    loadStudents();
+    return () => { mounted = false; };
+  }, []);
+
+  const showConfirm = (
+    title: string,
+    description: string,
+    onConfirm: () => Promise<void>,
+    destructive = false
+  ) => {
+    setConfirmState({ title, description, onConfirm, destructive });
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmState) return;
+    try {
+      await confirmState.onConfirm();
+    } catch (error: any) {
+      console.error("Action failed:", error);
+      toast.error("Unable to complete this action. Please try again.");
+    } finally {
+      setConfirmOpen(false);
+      setConfirmState(null);
+    }
+  };
+
+  const handleApprove = (student: Student) => {
+    showConfirm(
+      "Approve student",
+      `Approve ${student.name} and mark the application as fully approved?`,
+      async () => {
+        await patchStudentStatus(student.id, "APPROVED");
+        const updated = { ...student, status: "APPROVED" as const };
+        setStudents(students.map(s => s.id === student.id ? updated : s));
+        setSelected(updated);
+        toast.success(`${student.name} approved`);
+      }
+    );
+  };
+
+  const handleReject = (student: Student) => {
+    showConfirm(
+      "Reject student",
+      `Reject ${student.name} and send back to the teacher for review?`,
+      async () => {
+        await patchStudentStatus(student.id, "PENDING_TEACHER");
+        const updated = { ...student, status: "PENDING_TEACHER" as const };
+        setStudents(students.map(s => s.id === student.id ? updated : s));
+        setSelected(updated);
+        toast.success(`${student.name} sent back to teacher`);
+      },
+      true
+    );
+  };
 
   const schools = useMemo(() => Array.from(new Set(students.map(s => s.school))), [students]);
+  const classes = useMemo(
+    () => Array.from(new Set(students.map(s => s.class))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    [students],
+  );
+  const divisions = useMemo(
+    () => Array.from(new Set(students.map(s => s.division))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+    [students],
+  );
 
   const grouped = useMemo(() => {
     const filtered = students.filter(s => {
@@ -67,13 +257,15 @@ function AdminStudents() {
         s.name.toLowerCase().includes(search.toLowerCase()) ||
         s.admissionNo.toLowerCase().includes(search.toLowerCase());
       const matchesSchool = !schoolFilter || s.school === schoolFilter;
-      return matchesSearch && matchesSchool;
+      const matchesClass = !classFilter || s.class === classFilter;
+      const matchesDivision = !divisionFilter || s.division === divisionFilter;
+      return matchesSearch && matchesSchool && matchesClass && matchesDivision;
     });
     return filtered.reduce<Record<string, Student[]>>((acc, s) => {
       (acc[s.school] ||= []).push(s);
       return acc;
     }, {});
-  }, [students, search, schoolFilter]);
+  }, [students, search, schoolFilter, classFilter, divisionFilter]);
 
   const handleSave = (updated: Student) => {
     setStudents(students.map(s => s.id === updated.id ? updated : s));
@@ -84,14 +276,159 @@ function AdminStudents() {
 
   const closeDialog = () => { setSelected(null); setEditing(false); };
 
+  const generatePDF = async () => {
+    if (students.length === 0) {
+      toast.error("No students to download");
+      return;
+    }
+
+    setDownloadingPdf(true);
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 10;
+      const contentWidth = pageWidth - 2 * margin;
+      let yPosition = margin;
+      const lineHeight = 7;
+      const pageBottomMargin = 20;
+
+      // Title
+      doc.setFontSize(16);
+      doc.setFont(undefined, "bold");
+      doc.text("Student Details Report", margin, yPosition);
+      yPosition += 10;
+
+      // Generated date
+      doc.setFontSize(10);
+      doc.setFont(undefined, "normal");
+      doc.text(`Generated: ${new Date().toLocaleDateString()}`, margin, yPosition);
+      yPosition += 8;
+
+      // Add each student
+      for (let i = 0; i < students.length; i++) {
+        const student = students[i];
+
+        // Check if we need a new page
+        if (yPosition > pageHeight - pageBottomMargin) {
+          doc.addPage();
+          yPosition = margin;
+        }
+
+        // Student header with background
+        doc.setFillColor(220, 220, 220);
+        doc.rect(margin, yPosition - 5, contentWidth, 8, "F");
+        doc.setFontSize(11);
+        doc.setFont(undefined, "bold");
+        doc.text(`${student.name} (ID: ${student.admissionNo})`, margin + 2, yPosition);
+        yPosition += 10;
+
+        // Photo and basic info side by side
+        let photoAdded = false;
+        if (student.photo) {
+          try {
+            const photoDataUrl = await fetchImageAsDataUrl(student.photo);
+            const format = getImageFormatFromDataUrl(photoDataUrl);
+            doc.addImage(photoDataUrl, format, margin, yPosition, 25, 30);
+            photoAdded = true;
+          } catch (e) {
+            console.error("Error adding photo:", e);
+          }
+        }
+
+        const infoStartX = photoAdded ? margin + 30 : margin;
+        const infoWidth = contentWidth - (photoAdded ? 30 : 0);
+        doc.setFontSize(9);
+        doc.setFont(undefined, "normal");
+
+        const basicInfo = [
+          `School: ${student.school}`,
+          `Class: ${student.class}-${student.division}`,
+          `Admission No: ${student.admissionNo}`,
+          `Status: ${getStatusLabel(student.status)}`,
+        ];
+
+        basicInfo.forEach((info, idx) => {
+          doc.text(info, infoStartX + 2, yPosition + (idx * lineHeight));
+        });
+
+        const photoHeight = photoAdded ? 32 : basicInfo.length * lineHeight;
+        yPosition += photoHeight + 8;
+
+        // Detailed information
+        const details = [
+          ["Date of Birth", student.dob],
+          ["Blood Group", student.bloodGroup],
+          ["Gender", student.gender],
+          ["Parent Name", student.parentName],
+          ["Parent Mobile", student.parentMobile],
+          ["Address", student.address],
+          ["Emergency Contact", student.emergencyContact],
+          ["Uploaded By", student.uploadedBy],
+        ];
+
+        doc.setFontSize(8);
+        doc.setFont(undefined, "bold");
+        details.forEach(([label, value]) => {
+          if (yPosition > pageHeight - pageBottomMargin) {
+            doc.addPage();
+            yPosition = margin;
+          }
+          doc.setFont(undefined, "bold");
+          doc.text(`${label}:`, margin + 2, yPosition);
+          doc.setFont(undefined, "normal");
+          const wrappedText = doc.splitTextToSize(value || "—", contentWidth - 40);
+          doc.text(wrappedText, margin + 40, yPosition);
+          yPosition += Math.max(lineHeight, wrappedText.length * 3.5);
+        });
+
+        // Separator
+        yPosition += 4;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(margin, yPosition, margin + contentWidth, yPosition);
+        yPosition += 6;
+      }
+
+      // Save the PDF
+      doc.save(`Student_Details_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success("PDF downloaded successfully");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF");
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   return (
     <DashboardLayout title="Students" role="Admin" items={adminSidebar}>
       <div className="space-y-6">
-        <div className="rounded-xl bg-primary/10 border border-primary/20 p-4">
+        <div className="rounded-xl bg-primary/10 border border-primary/20 p-4 flex items-center justify-between">
           <p className="text-sm text-primary">
-            🔒 Showing teacher-approved students grouped by school. Click any student to view full details and edit.
+            Review student applications grouped by school. Approve or reject entries pending admin review.
           </p>
+          <Button
+            onClick={generatePDF}
+            disabled={downloadingPdf || students.length === 0}
+            variant="hero"
+            size="sm"
+            className="whitespace-nowrap"
+          >
+            <DownloadIcon size={16} />
+            {downloadingPdf ? "Generating..." : "Download PDF"}
+          </Button>
         </div>
+
+        {loading && (
+          <div className="glass-card rounded-xl p-8 text-center text-muted-foreground">
+            Loading students...
+          </div>
+        )}
 
         {/* Filters */}
         <div className="glass-card rounded-xl p-4 flex flex-col sm:flex-row gap-3">
@@ -112,6 +449,26 @@ function AdminStudents() {
             <option value="">All Schools ({students.length})</option>
             {schools.map(s => (
               <option key={s} value={s}>{s} ({students.filter(st => st.school === s).length})</option>
+            ))}
+          </select>
+          <select
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground"
+          >
+            <option value="">All Classes ({students.length})</option>
+            {classes.map(c => (
+              <option key={c} value={c}>{c} ({students.filter(st => st.class === c).length})</option>
+            ))}
+          </select>
+          <select
+            value={divisionFilter}
+            onChange={(e) => setDivisionFilter(e.target.value)}
+            className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground"
+          >
+            <option value="">All Divisions ({students.length})</option>
+            {divisions.map(d => (
+              <option key={d} value={d}>{d} ({students.filter(st => st.division === d).length})</option>
             ))}
           </select>
         </div>
@@ -137,7 +494,7 @@ function AdminStudents() {
                     </div>
                     <div className="text-left">
                       <p className="font-semibold text-sm">{schoolName}</p>
-                      <p className="text-xs text-muted-foreground">{list.length} approved student{list.length !== 1 ? "s" : ""}</p>
+                      <p className="text-xs text-muted-foreground">{list.length} student{list.length !== 1 ? "s" : ""}</p>
                     </div>
                   </div>
                   {isOpen ? <ChevronDown size={18} className="text-muted-foreground" /> : <ChevronRight size={18} className="text-muted-foreground" />}
@@ -167,8 +524,8 @@ function AdminStudents() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="hidden sm:inline rounded-full px-3 py-1 text-xs font-medium bg-emerald-500/10 text-emerald-400">
-                            Approved
+                          <span className={`hidden sm:inline rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClass(student.status)}`}>
+                            {getStatusLabel(student.status)}
                           </span>
                           <Eye size={16} className="text-muted-foreground" />
                         </div>
@@ -232,11 +589,23 @@ function AdminStudents() {
                   ))}
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="flex-col sm:flex-row gap-2">
                   <Button variant="outline" onClick={closeDialog}>Close</Button>
-                  <Button variant="hero" onClick={() => setEditing(true)}>
-                    <Edit size={14} /> Edit Details
-                  </Button>
+                  {selected.status === "PENDING_ADMIN" && (
+                    <>
+                      <Button variant="outline" className="text-destructive border-destructive/30" onClick={() => handleReject(selected)}>
+                        <XCircle size={14} /> Reject
+                      </Button>
+                      <Button variant="hero" onClick={() => handleApprove(selected)}>
+                        <ThumbsUp size={14} /> Approve
+                      </Button>
+                    </>
+                  )}
+                  {selected.status === "APPROVED" && (
+                    <Button variant="hero" onClick={() => setEditing(true)}>
+                      <Edit size={14} /> Edit Details
+                    </Button>
+                  )}
                 </DialogFooter>
               </>
             )}
@@ -250,6 +619,20 @@ function AdminStudents() {
             )}
           </DialogContent>
         </Dialog>
+
+        <ConfirmActionDialog
+          open={confirmOpen}
+          onOpenChange={(open) => {
+            setConfirmOpen(open);
+            if (!open) setConfirmState(null);
+          }}
+          title={confirmState?.title || "Confirm action"}
+          description={confirmState?.description || "Are you sure you want to proceed?"}
+          confirmLabel="Yes"
+          cancelLabel="No"
+          destructive={confirmState?.destructive}
+          onConfirm={handleConfirmAction}
+        />
       </div>
     </DashboardLayout>
   );

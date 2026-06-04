@@ -8,7 +8,15 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
 import { teacherSidebar } from "@/lib/nav";
+import {
+  getStatusBadgeClass,
+  getStatusLabel,
+  normalizeStudentStatus,
+  type StudentWorkflowStatus,
+} from "@/lib/student-status";
+import { patchStudentStatus } from "@/service/students";
 import { handleGetTeacherDetails, createStudent, getTeacherStudents, updateStudent } from "@/service/teacher";
 
 export const Route = createFileRoute("/teacher")({
@@ -39,15 +47,14 @@ type StudentEntry = {
   address: string;
   emergencyContact: string;
   photo: string | null;
-  status: "Draft" | "Sent to Parent" | "Parent Confirmed" | "Teacher Approved";
+  status: StudentWorkflowStatus;
 };
 
-const dummyStudents: StudentEntry[] = [
-  { id: 1, name: "Rahul Verma", admissionNo: "ADM-001", class: "8", division: "A", dob: "2012-03-15", bloodGroup: "B+", gender: "Male", parentName: "Suresh Verma", parentMobile: "+91 98765 43210", address: "B-45, Sector 62, Noida", emergencyContact: "+91 98765 43211", photo: null, status: "Sent to Parent" },
-  { id: 2, name: "Sneha Patel", admissionNo: "ADM-002", class: "8", division: "A", dob: "2014-07-22", bloodGroup: "A+", gender: "Female", parentName: "Ramesh Patel", parentMobile: "+91 87654 32109", address: "C-12, Vasant Kunj, Delhi", emergencyContact: "+91 87654 32110", photo: null, status: "Parent Confirmed" },
-  { id: 3, name: "Amit Kumar", admissionNo: "ADM-003", class: "8", division: "A", dob: "2010-11-05", bloodGroup: "O+", gender: "Male", parentName: "Manoj Kumar", parentMobile: "+91 76543 21098", address: "D-8, Dwarka, Delhi", emergencyContact: "+91 76543 21099", photo: null, status: "Teacher Approved" },
-  { id: 4, name: "Meera Joshi", admissionNo: "ADM-004", class: "8", division: "A", dob: "2016-01-20", bloodGroup: "AB+", gender: "Female", parentName: "Vivek Joshi", parentMobile: "+91 65432 10987", address: "A-23, Greater Noida", emergencyContact: "+91 65432 10988", photo: null, status: "Draft" },
-];
+type ConfirmState = {
+  title: string;
+  description: string;
+  onConfirm: () => Promise<void>;
+};
 
 function TeacherPortal() {
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
@@ -157,6 +164,8 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
   const [viewingStudent, setViewingStudent] = useState<StudentEntry | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const filtered = students.filter((s) => {
     const q = search.trim().toLowerCase();
@@ -171,63 +180,89 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
 
   const stats = [
     { label: "My Students", value: String(students.length), color: "text-primary" },
-    { label: "Sent to Parents", value: String(students.filter(s => s.status === "Sent to Parent").length), color: "text-yellow-400" },
-    { label: "Parent Confirmed", value: String(students.filter(s => s.status === "Parent Confirmed").length), color: "text-blue-400" },
-    { label: "Approved", value: String(students.filter(s => s.status === "Teacher Approved").length), color: "text-emerald-400" },
+    { label: "Pending Parent", value: String(students.filter(s => s.status === "PENDING_PARENT").length), color: "text-yellow-400" },
+    { label: "Pending Teacher", value: String(students.filter(s => s.status === "PENDING_TEACHER").length), color: "text-blue-400" },
+    { label: "Approved", value: String(students.filter(s => s.status === "APPROVED").length), color: "text-emerald-400" },
   ];
 
-  const handleSaveStudent = async (student: StudentEntry) => {
-    const scoped = { ...student, class: profile.classGrade, division: profile.division };
+  const showConfirm = (title: string, description: string, onConfirm: () => Promise<void>) => {
+    setConfirmState({ title, description, onConfirm });
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmState) return;
+    try {
+      await confirmState.onConfirm();
+    } catch (error: any) {
+      console.error("Action failed:", error);
+      toast.error("Unable to complete this action. Please try again.");
+    } finally {
+      setConfirmOpen(false);
+      setConfirmState(null);
+    }
+  };
+
+  const persistStudent = async (student: StudentEntry, targetStatus: StudentWorkflowStatus) => {
+    const scoped = { ...student, class: profile.classGrade, division: profile.division, status: targetStatus };
+    const payload = {
+      full_name: scoped.name,
+      school: profile.schoolId || profile.schoolName || "",
+      guardian_phone: scoped.parentMobile,
+      class_name: scoped.class,
+      division: scoped.division,
+      photo: scoped.photo,
+      status: targetStatus,
+    };
 
     if (editingStudent) {
-      try {
-        const apiResponse = await updateStudent(editingStudent.id, {
-          full_name: scoped.name,
-          school: profile.schoolId || profile.schoolName || "",
-          guardian_phone: scoped.parentMobile,
-          class_name: scoped.class,
-          division: scoped.division,
-          photo: scoped.photo,
-        });
-
-        if (apiResponse?.id) {
-          scoped.id = apiResponse.id;
-        }
-
-        setStudents(students.map(s => s.id === scoped.id ? scoped : s));
-        toast.success(`Updated ${scoped.name}`);
-      } catch (error: any) {
-        console.error(`Update student failed for ${editingStudent.id}:`, error);
-        toast.error("Unable to update student on server. Please try again.");
-      }
+      const apiResponse = await updateStudent(editingStudent.id, payload);
+      if (apiResponse?.id) scoped.id = apiResponse.id;
+      if (apiResponse?.status) scoped.status = normalizeStudentStatus(apiResponse.status);
+      setStudents(students.map(s => s.id === scoped.id ? scoped : s));
+      toast.success(`Updated ${scoped.name}`);
     } else {
-      try {
-        const apiResponse = await createStudent({
-          full_name: scoped.name,
-          school: profile.schoolId || profile.schoolName || "",
-          guardian_phone: scoped.parentMobile,
-          class_name: scoped.class,
-          division: scoped.division,
-          photo: scoped.photo,
-        });
-
-        if (apiResponse?.id) {
-          scoped.id = apiResponse.id;
-        }
-
-        toast.success(`Saved ${scoped.name} to server`, {
-          description: scoped.status === "Sent to Parent" ? "OTP link sent to parent." : "Saved as draft.",
-        });
-      } catch (error: any) {
-        console.error("Create student failed:", error);
-        toast.error("Unable to save student to server. Please try again.");
-      }
-
+      const apiResponse = await createStudent(payload);
+      if (apiResponse?.id) scoped.id = apiResponse.id;
+      if (apiResponse?.status) scoped.status = normalizeStudentStatus(apiResponse.status);
       setStudents([...students, { ...scoped, id: scoped.id || Date.now() }]);
+      toast.success(`Saved ${scoped.name}`, {
+        description: targetStatus === "PENDING_PARENT" ? "Sent to parent for verification." : "Saved as draft.",
+      });
     }
 
     setShowAddForm(false);
     setEditingStudent(null);
+  };
+
+  const handleSaveStudent = (student: StudentEntry, targetStatus: StudentWorkflowStatus) => {
+    const actionText =
+      targetStatus === "DRAFT"
+        ? "save this student as a draft"
+        : targetStatus === "PENDING_PARENT"
+          ? editingStudent
+            ? "send this student to the parent for verification"
+            : "save and send this student to the parent for verification"
+          : "save these changes";
+
+    showConfirm(
+      "Confirm action",
+      `Are you sure you want to ${actionText}?`,
+      () => persistStudent(student, targetStatus)
+    );
+  };
+
+  const handleSendToParent = (student: StudentEntry) => {
+    showConfirm(
+      "Send to parent",
+      `Send ${student.name} to the parent for verification?`,
+      async () => {
+        await patchStudentStatus(student.id, "PENDING_PARENT");
+        setStudents(students.map(s => s.id === student.id ? { ...s, status: "PENDING_PARENT" } : s));
+        toast.success(`Sent ${student.name} to parent`);
+        setViewingStudent(null);
+      }
+    );
   };
 
   useEffect(() => {
@@ -257,7 +292,7 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
           address: s.address || "",
           emergencyContact: s.emergency_contact || s.emergencyContact || "",
           photo: s.photo || null,
-          status: s.status || "Draft",
+          status: normalizeStudentStatus(s.status),
         }));
 
         if (mounted) setStudents(mapped);
@@ -273,11 +308,22 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
 
   const handleApprove = (id: number) => {
     const student = students.find((s) => s.id === id);
-    setStudents(students.map(s => s.id === id ? { ...s, status: "Teacher Approved" as const } : s));
-    if (student) toast.success(`Approved ${student.name}`);
+    if (!student) return;
+
+    showConfirm(
+      "Approve student",
+      `Approve ${student.name} and send to admin for final review?`,
+      async () => {
+        await patchStudentStatus(id, "PENDING_ADMIN");
+        setStudents(students.map(s => s.id === id ? { ...s, status: "PENDING_ADMIN" as const } : s));
+        toast.success(`Approved ${student.name}`, { description: "Sent to admin for final approval." });
+        setViewingStudent(null);
+      }
+    );
   };
 
-  const canEdit = (student: StudentEntry) => student.status !== "Teacher Approved";
+  const canEdit = (student: StudentEntry) =>
+    student.status === "DRAFT" || student.status === "PENDING_TEACHER";
 
   return (
     <DashboardLayout title="Dashboard" role="Teacher" items={teacherSidebar}>
@@ -345,8 +391,21 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
             canEdit={canEdit(viewingStudent)}
             onClose={() => setViewingStudent(null)}
             onEdit={() => { setEditingStudent(viewingStudent); setViewingStudent(null); }}
+            onSendToParent={() => handleSendToParent(viewingStudent)}
+            onApprove={() => handleApprove(viewingStudent.id)}
           />
         )}
+
+        <ConfirmActionDialog
+          open={confirmOpen}
+          onOpenChange={(open) => {
+            setConfirmOpen(open);
+            if (!open) setConfirmState(null);
+          }}
+          title={confirmState?.title || "Confirm action"}
+          description={confirmState?.description || "Are you sure you want to proceed?"}
+          onConfirm={handleConfirmAction}
+        />
 
         {/* Filters */}
         <div className="glass-card rounded-xl p-4 flex flex-col sm:flex-row gap-3">
@@ -365,10 +424,11 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
             className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground"
           >
             <option value="">All Status</option>
-            <option value="Draft">Draft</option>
-            <option value="Sent to Parent">Sent to Parent</option>
-            <option value="Parent Confirmed">Parent Confirmed</option>
-            <option value="Teacher Approved">Teacher Approved</option>
+            <option value="DRAFT">Draft</option>
+            <option value="PENDING_PARENT">Pending Parent</option>
+            <option value="PENDING_TEACHER">Pending Teacher</option>
+            <option value="PENDING_ADMIN">Pending Admin</option>
+            <option value="APPROVED">Approved</option>
           </select>
         </div>
 
@@ -394,24 +454,14 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
                     <p className="text-xs text-muted-foreground truncate">
                       {student.admissionNo} • {student.parentMobile}
                     </p>
-                    <span className={`mt-1 inline-block md:hidden rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      student.status === "Draft" ? "bg-muted text-muted-foreground" :
-                      student.status === "Sent to Parent" ? "bg-yellow-500/10 text-yellow-400" :
-                      student.status === "Parent Confirmed" ? "bg-blue-500/10 text-blue-400" :
-                      "bg-emerald-500/10 text-emerald-400"
-                    }`}>
-                      {student.status}
+                    <span className={`mt-1 inline-block md:hidden rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusBadgeClass(student.status)}`}>
+                      {getStatusLabel(student.status)}
                     </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={`rounded-full px-3 py-1 text-xs font-medium hidden md:inline ${
-                    student.status === "Draft" ? "bg-muted text-muted-foreground" :
-                    student.status === "Sent to Parent" ? "bg-yellow-500/10 text-yellow-400" :
-                    student.status === "Parent Confirmed" ? "bg-blue-500/10 text-blue-400" :
-                    "bg-emerald-500/10 text-emerald-400"
-                  }`}>
-                    {student.status}
+                  <span className={`rounded-full px-3 py-1 text-xs font-medium hidden md:inline ${getStatusBadgeClass(student.status)}`}>
+                    {getStatusLabel(student.status)}
                   </span>
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewingStudent(student)}>
@@ -422,15 +472,20 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
                         <Edit size={14} />
                       </Button>
                     )}
-                    {student.status === "Parent Confirmed" && (
+                    {student.status === "PENDING_TEACHER" && (
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-emerald-400 hover:text-emerald-300"
+                        variant="hero"
+                        size="sm"
+                        className="h-8 text-xs"
                         onClick={() => handleApprove(student.id)}
                       >
-                        <ThumbsUp size={14} />
+                        <ThumbsUp size={14} /> Approve
                       </Button>
+                    )}
+                    {student.status === "PENDING_PARENT" && (
+                      <span className="text-xs text-yellow-400 hidden sm:inline">
+                        Verification from parent is pending
+                      </span>
                     )}
                   </div>
                 </div>
@@ -446,15 +501,20 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
 function StudentForm({ student, profile, onSave, onCancel }: {
   student: StudentEntry | null;
   profile: TeacherProfile;
-  onSave: (s: StudentEntry) => void;
+  onSave: (s: StudentEntry, targetStatus: StudentWorkflowStatus) => void;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState<StudentEntry>(student || {
     id: 0, name: "", admissionNo: "",
     class: profile.classGrade, division: profile.division,
     dob: "", bloodGroup: "",
-    gender: "", parentName: "", parentMobile: "", address: "", emergencyContact: "", photo: null, status: "Draft",
+    gender: "", parentName: "", parentMobile: "", address: "", emergencyContact: "", photo: null, status: "DRAFT",
   });
+
+  const isNew = !student;
+  const isDraftEdit = !!student && student.status === "DRAFT";
+  const isPendingParent = !!student && student.status === "PENDING_PARENT";
+  const isPendingTeacherEdit = !!student && student.status === "PENDING_TEACHER";
 
   return (
     <div className="glass-card rounded-2xl p-4 sm:p-6 glow-green-sm space-y-6">
@@ -549,18 +609,35 @@ function StudentForm({ student, profile, onSave, onCancel }: {
 
       <div className="flex flex-col sm:flex-row gap-3 justify-end">
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
-        <Button variant="heroOutline" onClick={() => onSave({ ...form, status: "Draft" })}>Save as Draft</Button>
-        <Button variant="hero" onClick={() => onSave({ ...form, status: "Sent to Parent" })}>Save & Send to Parent</Button>
+        {isPendingParent && (
+          <p className="text-sm text-yellow-400 self-center sm:mr-auto">
+            Verification from parent is pending.
+          </p>
+        )}
+        {isNew && (
+          <>
+            <Button variant="heroOutline" onClick={() => onSave(form, "DRAFT")}>Save as Draft</Button>
+            <Button variant="hero" onClick={() => onSave(form, "PENDING_PARENT")}>Save & Send to Parent</Button>
+          </>
+        )}
+        {isDraftEdit && (
+          <Button variant="hero" onClick={() => onSave(form, "PENDING_PARENT")}>Send to Parent</Button>
+        )}
+        {isPendingTeacherEdit && (
+          <Button variant="heroOutline" onClick={() => onSave(form, "PENDING_TEACHER")}>Save Changes</Button>
+        )}
       </div>
     </div>
   );
 }
 
-function StudentDetailView({ student, canEdit, onClose, onEdit }: {
+function StudentDetailView({ student, canEdit, onClose, onEdit, onSendToParent, onApprove }: {
   student: StudentEntry;
   canEdit: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onSendToParent: () => void;
+  onApprove: () => void;
 }) {
   return (
     <div className="glass-card rounded-2xl p-4 sm:p-6 space-y-4">
@@ -581,14 +658,15 @@ function StudentDetailView({ student, canEdit, onClose, onEdit }: {
           ) : student.name[0]}
         </div>
         <div>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-            student.status === "Teacher Approved" ? "bg-emerald-500/10 text-emerald-400" :
-            student.status === "Parent Confirmed" ? "bg-blue-500/10 text-blue-400" :
-            student.status === "Sent to Parent" ? "bg-yellow-500/10 text-yellow-400" :
-            "bg-muted text-muted-foreground"
-          }`}>
-            {student.status}
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClass(student.status)}`}>
+            {getStatusLabel(student.status)}
           </span>
+          {student.status === "PENDING_PARENT" && (
+            <p className="text-xs text-yellow-400 mt-2">Verification from parent is pending.</p>
+          )}
+          {student.status === "PENDING_ADMIN" && (
+            <p className="text-xs text-orange-400 mt-2">Waiting for admin approval.</p>
+          )}
         </div>
       </div>
 
@@ -609,6 +687,17 @@ function StudentDetailView({ student, canEdit, onClose, onEdit }: {
             <p className="font-medium">{value || "—"}</p>
           </div>
         ))}
+      </div>
+
+      <div className="flex flex-wrap gap-3 justify-end">
+        {student.status === "DRAFT" && (
+          <Button variant="hero" size="sm" onClick={onSendToParent}>Send to Parent</Button>
+        )}
+        {student.status === "PENDING_TEACHER" && (
+          <Button variant="hero" size="sm" onClick={onApprove}>
+            <ThumbsUp size={14} /> Approve
+          </Button>
+        )}
       </div>
     </div>
   );

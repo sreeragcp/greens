@@ -64,6 +64,7 @@ export const createStudent = async (studentData: {
   guardian_phone: string;
   class_name: string;
   division: string;
+  status: string;
   photo?: string | null;
 }) => {
   try {
@@ -73,6 +74,7 @@ export const createStudent = async (studentData: {
     formData.append("guardian_phone", studentData.guardian_phone);
     formData.append("class_name", studentData.class_name);
     formData.append("division", studentData.division);
+    formData.append("status", studentData.status);
 
     if (studentData.photo) {
       if (studentData.photo.startsWith("data:")) {
@@ -107,6 +109,7 @@ export const updateStudent = async (
     guardian_phone: string;
     class_name: string;
     division: string;
+    status?: string;
     photo?: string | null;
   }
 ) => {
@@ -117,6 +120,9 @@ export const updateStudent = async (
     formData.append("guardian_phone", studentData.guardian_phone);
     formData.append("class_name", studentData.class_name);
     formData.append("division", studentData.division);
+    if (studentData.status) {
+      formData.append("status", studentData.status);
+    }
 
     if (studentData.photo) {
       if (studentData.photo.startsWith("data:")) {

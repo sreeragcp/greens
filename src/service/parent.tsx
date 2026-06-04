@@ -34,11 +34,13 @@ export const patchParentStudent = async (
     guardian_phone?: string;
     address?: string;
     emergency_contact?: string;
+    status?: string;
     photo?: string | null;
   }
 ) => {
   try {
     const formData = new FormData();
+    if (studentData.status) formData.append("status", studentData.status);
     if (studentData.full_name) formData.append("full_name", studentData.full_name);
     if (studentData.date_of_birth) formData.append("date_of_birth", studentData.date_of_birth);
     if (studentData.blood_group) formData.append("blood_group", studentData.blood_group);

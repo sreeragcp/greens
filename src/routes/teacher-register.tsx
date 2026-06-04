@@ -70,6 +70,63 @@ function TeacherRegister() {
   const [schoolList, setSchoolList] = useState<Array<{ id: string; name: string }>>([]);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [resendTimer, setResendTimer] = useState(0);
+
+  const startResendCountdown = () => setResendTimer(300);
+
+  const getRegistrationPayload = () => {
+    const [first_name = "", last_name = ""] = profile.teacherName
+      .trim()
+      .split(/\s+/, 2);
+
+    return {
+      phone: profile.mobile,
+      first_name,
+      last_name,
+      email: profile.email,
+      role: "TEACHER",
+      school: profile.schoolId || "",
+      division: profile.division || "",
+      class: profile.classGrade || "",
+    };
+  };
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+
+    try {
+      const res = await teacherRegistration(getRegistrationPayload());
+      const success = res === true || res?.status === true || res?.success === true;
+
+      if (success) {
+        toast.success(`OTP resent to ${profile.mobile}`, {
+          description: "Please check your phone for the new code.",
+        });
+        startResendCountdown();
+      } else {
+        toast.error(
+          res?.error || res?.message || "Unable to resend OTP. Please try again.",
+        );
+      }
+    } catch (err: any) {
+      const msg =
+        err?.error ||
+        err?.message ||
+        (err && JSON.stringify(err)) ||
+        "Unable to resend OTP. Please try again.";
+      toast.error(msg);
+    }
+  };
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+
+    const interval = window.setInterval(() => {
+      setResendTimer((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [resendTimer]);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -137,16 +194,7 @@ function TeacherRegister() {
       .trim()
       .split(/\s+/, 2);
 
-    const payload = {
-      phone: profile.mobile,
-      first_name,
-      last_name,
-      email: profile.email,
-      role: "TEACHER",
-      school: profile.schoolId || "",
-      division: profile.division || "",
-      class: profile.classGrade || "",
-    };
+    const payload = getRegistrationPayload();
 
     try {
       const res = await teacherRegistration(payload);
@@ -157,12 +205,15 @@ function TeacherRegister() {
           description: "Use any 6 digits to continue (demo mode).",
         });
         setStep("otp");
+        startResendCountdown();
       } else {
         toast.error("Unable to start registration. Please try again.");
       }
     } catch (err: any) {
       const msg =
-        err?.message || (err && JSON.stringify(err)) ||
+        err?.error ||
+        err?.message ||
+        (err && JSON.stringify(err)) ||
         "Unable to start registration. Please try again.";
       toast.error(msg);
     }
@@ -188,15 +239,31 @@ function TeacherRegister() {
       return;
     }
 
-    const response = await handleVerifyOTP(profile.mobile, otp.join("")); 
-    console.log(response,"rrrrrrrrrrrrrrr");
-    
+    try {
+      const response = await handleVerifyOTP(profile.mobile, otp.join(""));
+      console.log(response, "rrrrrrrrrrrrrrr");
 
-    toast.success(`Welcome, ${profile.teacherName}!`, {
-      description: "OTP verified — redirecting to your dashboard…",
-    });
-    setStep("done");
-    setTimeout(() => navigate({ to: "/teacher" }), 1200);
+      const success = response?.status === true;
+      if (!success) {
+        toast.error(
+          response?.error || response?.message || "OTP verification failed. Please try again.",
+        );
+        return;
+      }
+
+      toast.success(`Welcome, ${profile.teacherName}!`, {
+        description: "OTP verified — redirecting to your dashboard…",
+      });
+      setStep("done");
+      setTimeout(() => navigate({ to: "/teacher" }), 1200);
+    } catch (err: any) {
+      const msg =
+        err?.error ||
+        err?.message ||
+        (err && JSON.stringify(err)) ||
+        "Unable to verify OTP. Please try again.";
+      toast.error(msg);
+    }
   };
 
   return (
@@ -487,12 +554,13 @@ function TeacherRegister() {
                   Didn't receive?{" "}
                   <button
                     type="button"
-                    className="text-primary hover:underline"
-                    onClick={() =>
-                      toast.success(`OTP resent to ${profile.mobile}`)
-                    }
+                    className={`text-primary ${resendTimer > 0 ? "opacity-50 cursor-not-allowed" : "hover:underline"}`}
+                    onClick={handleResendOtp}
+                    disabled={resendTimer > 0}
                   >
-                    Resend OTP
+                    {resendTimer > 0
+                      ? `Resend OTP (${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, "0")})`
+                      : "Resend OTP"}
                   </button>
                 </p>
 

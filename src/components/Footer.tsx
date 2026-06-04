@@ -25,7 +25,6 @@ export function Footer() {
               <li><Link to="/teacher-register" className="hover:text-primary transition-colors">Teacher Register</Link></li>
             </ul>
           </div>
-
           <div>
             <h4 className="text-sm font-semibold mb-4">Company</h4>
             <ul className="space-y-2.5 text-sm text-muted-foreground">
@@ -38,9 +37,9 @@ export function Footer() {
           <div>
             <h4 className="text-sm font-semibold mb-4">Get in Touch</h4>
             <ul className="space-y-2.5 text-sm text-muted-foreground">
-              <li className="flex items-center gap-2"><Mail size={14} className="text-primary" /> contact@markone.in</li>
-              <li className="flex items-center gap-2"><Phone size={14} className="text-primary" /> +91 98765 43210</li>
-              <li className="flex items-center gap-2"><MapPin size={14} className="text-primary" /> New Delhi, India</li>
+              <li className="flex items-center gap-2"><Mail size={14} className="text-primary" /> advertising@markone.website</li>
+              <li className="flex items-center gap-2"><Phone size={14} className="text-primary" /> +91 8589949006</li>
+              <li className="flex items-center gap-2"><MapPin size={14} className="text-primary" /> Kuthuparamba, Kerala</li>
             </ul>
           </div>
         </div>
