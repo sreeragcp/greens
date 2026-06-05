@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Mail, Phone, MapPin } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { sendContactMessage } from "@/service/contact";
 
 export const Route = createFileRoute("/contact")({
   component: ContactPage,
@@ -19,25 +20,39 @@ function ContactPage() {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const recipient = "advertising@markone.website";
-    const mailSubject = subject || "New message from website";
-    const body = `Name: ${name}\nEmail: ${email}\n\n${message}`;
-    const mailto = `mailto:${recipient}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(body)}`;
+    if (!name.trim() || !email.trim() || !message.trim()) {
+      toast.error("Please fill in your name, email, and message before sending.");
+      return;
+    }
 
-    window.location.href = mailto;
+    try {
+      await sendContactMessage({
+        name: name.trim(),
+        email: email.trim(),
+        subject: subject.trim() || "Test",
+        message: message.trim(),
+      });
 
-    toast.success("Email draft opened.", {
-      description: "Please send the message from your email app.",
-    });
+      toast.success("Message sent successfully.", {
+        description: "We will contact you soon.",
+      });
 
-    setName("");
-    setEmail("");
-    setSubject("");
-    setMessage("");
-    formRef.current?.reset();
+      setName("");
+      setEmail("");
+      setSubject("");
+      setMessage("");
+      formRef.current?.reset();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Unable to send your message. Please try again later.";
+      toast.error(message);
+    }
   };
 
   return (
