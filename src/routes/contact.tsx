@@ -46,23 +46,40 @@ function ContactPage() {
       <div className="pt-24 sm:pt-32 pb-16 sm:pb-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10 sm:mb-16">
-            <h1 className="text-3xl sm:text-4xl font-bold">Get in <span className="gradient-text">Touch</span></h1>
-            <p className="mt-4 text-muted-foreground">We'd love to hear from you. Reach out for demos, support, or partnerships.</p>
+            <h1 className="text-3xl sm:text-4xl font-bold">
+              Get in <span className="gradient-text">Touch</span>
+            </h1>
+            <p className="mt-4 text-muted-foreground">
+              We'd love to hear from you. Reach out for demos, supports.
+            </p>
           </div>
 
           <div className="grid gap-8 lg:grid-cols-2">
             <div className="space-y-6">
               {[
-                { icon: Mail, label: "Email", value: "advertising@markone.website" },
-                { icon: Phone, label: "Phone", value: "+91 98765 43210" },
-                { icon: MapPin, label: "Address", value: "New Delhi, India" },
+                {
+                  icon: Mail,
+                  label: "Email",
+                  value: "advertising@markone.website",
+                },
+                { icon: Phone, label: "Phone", value: "+91 8589949006" },
+                {
+                  icon: MapPin,
+                  label: "Address",
+                  value: "Valiyavelicham\nKuthuparamba\nKerala, India",
+                },
               ].map((item) => (
-                <div key={item.label} className="glass-card rounded-xl p-5 flex items-center gap-4">
+                <div
+                  key={item.label}
+                  className="glass-card rounded-xl p-5 flex items-center gap-4"
+                >
                   <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
                     <item.icon size={22} />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">{item.label}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.label}
+                    </p>
                     <p className="font-medium">{item.value}</p>
                   </div>
                 </div>
@@ -111,7 +128,14 @@ function ContactPage() {
                     className="flex w-full rounded-md border border-border bg-surface px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
                   />
                 </div>
-                <Button type="submit" variant="hero" size="lg" className="w-full">Send Message</Button>
+                <Button
+                  type="submit"
+                  variant="hero"
+                  size="lg"
+                  className="w-full"
+                >
+                  Send Message
+                </Button>
               </form>
             </div>
           </div>

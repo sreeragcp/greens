@@ -16,6 +16,7 @@ import {
   normalizeStudentStatus,
   type StudentWorkflowStatus,
 } from "@/lib/student-status";
+import { isValidIndianMobile } from "@/lib/utils";
 import { patchStudentStatus } from "@/service/students";
 import { handleGetTeacherDetails, createStudent, getTeacherStudents, updateStudent } from "@/service/teacher";
 
@@ -510,11 +511,37 @@ function StudentForm({ student, profile, onSave, onCancel }: {
     dob: "", bloodGroup: "",
     gender: "", parentName: "", parentMobile: "", address: "", emergencyContact: "", photo: null, status: "DRAFT",
   });
+  const [errors, setErrors] = useState<{ parentMobile?: string; emergencyContact?: string }>({});
 
   const isNew = !student;
   const isDraftEdit = !!student && student.status === "DRAFT";
   const isPendingParent = !!student && student.status === "PENDING_PARENT";
   const isPendingTeacherEdit = !!student && student.status === "PENDING_TEACHER";
+
+  const validateForm = () => {
+    const nextErrors: typeof errors = {};
+
+    if (!form.parentMobile.trim() || !isValidIndianMobile(form.parentMobile)) {
+      nextErrors.parentMobile =
+        "Mobile number should follow Indian standard: 10 digits starting with 6-9.";
+    }
+
+    if (form.emergencyContact.trim() && !isValidIndianMobile(form.emergencyContact)) {
+      nextErrors.emergencyContact =
+        "Emergency contact should be a valid Indian mobile number.";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSave = (targetStatus: StudentWorkflowStatus) => {
+    if (!validateForm()) {
+      toast.error("Please fix the mobile number fields before saving.");
+      return;
+    }
+    onSave(form, targetStatus);
+  };
 
   return (
     <div className="glass-card rounded-2xl p-4 sm:p-6 glow-green-sm space-y-6">
@@ -596,6 +623,7 @@ function StudentForm({ student, profile, onSave, onCancel }: {
         <div className="space-y-2">
           <Label>Parent Mobile *</Label>
           <Input type="tel" value={form.parentMobile} onChange={(e) => setForm({ ...form, parentMobile: e.target.value })} placeholder="+91 XXXXX XXXXX" className="bg-surface border-border" />
+          {errors.parentMobile && <p className="text-xs text-destructive">{errors.parentMobile}</p>}
         </div>
         <div className="space-y-2">
           <Label>Address</Label>
@@ -604,6 +632,7 @@ function StudentForm({ student, profile, onSave, onCancel }: {
         <div className="space-y-2">
           <Label>Emergency Contact</Label>
           <Input type="tel" value={form.emergencyContact} onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })} placeholder="+91 XXXXX XXXXX" className="bg-surface border-border" />
+          {errors.emergencyContact && <p className="text-xs text-destructive">{errors.emergencyContact}</p>}
         </div>
       </div>
 
@@ -616,15 +645,15 @@ function StudentForm({ student, profile, onSave, onCancel }: {
         )}
         {isNew && (
           <>
-            <Button variant="heroOutline" onClick={() => onSave(form, "DRAFT")}>Save as Draft</Button>
-            <Button variant="hero" onClick={() => onSave(form, "PENDING_PARENT")}>Save & Send to Parent</Button>
+            <Button variant="heroOutline" onClick={() => handleSave("DRAFT")}>Save as Draft</Button>
+            <Button variant="hero" onClick={() => handleSave("PENDING_PARENT")}>Save & Send to Parent</Button>
           </>
         )}
         {isDraftEdit && (
-          <Button variant="hero" onClick={() => onSave(form, "PENDING_PARENT")}>Send to Parent</Button>
+          <Button variant="hero" onClick={() => handleSave("PENDING_PARENT")}>Send to Parent</Button>
         )}
         {isPendingTeacherEdit && (
-          <Button variant="heroOutline" onClick={() => onSave(form, "PENDING_TEACHER")}>Save Changes</Button>
+          <Button variant="heroOutline" onClick={() => handleSave("PENDING_TEACHER")}>Save Changes</Button>
         )}
       </div>
     </div>

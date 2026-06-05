@@ -14,6 +14,7 @@ import {
   normalizeStudentStatus,
   type StudentWorkflowStatus,
 } from "@/lib/student-status";
+import { isValidIndianMobile } from "@/lib/utils";
 import { getParentStudents, patchParentStudent } from "@/service/parent";
 
 export const Route = createFileRoute("/parent")({
@@ -315,6 +316,25 @@ function ParentEditForm({ student, onSave, onCancel }: {
   onCancel: () => void;
 }) {
   const [form, setForm] = useState({ ...student });
+  const [errors, setErrors] = useState<{ emergencyContact?: string }>({});
+
+  const validateForm = () => {
+    const nextErrors: typeof errors = {};
+    if (form.emergencyContact.trim() && !isValidIndianMobile(form.emergencyContact)) {
+      nextErrors.emergencyContact =
+        "Emergency contact should follow Indian mobile number standards.";
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSave = () => {
+    if (!validateForm()) {
+      toast.error("Please correct the contact number before saving.");
+      return;
+    }
+    onSave(form);
+  };
 
   return (
     <div className="glass-card rounded-2xl p-4 sm:p-6 glow-green-sm space-y-6">
@@ -381,12 +401,13 @@ function ParentEditForm({ student, onSave, onCancel }: {
         <div className="space-y-2">
           <Label>Emergency Contact</Label>
           <Input type="tel" value={form.emergencyContact} onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })} className="bg-surface border-border" />
+          {errors.emergencyContact && <p className="text-xs text-destructive">{errors.emergencyContact}</p>}
         </div>
       </div>
 
       <div className="flex gap-3 justify-end">
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
-        <Button variant="hero" onClick={() => onSave(form)}>Save Changes</Button>
+        <Button variant="hero" onClick={handleSave}>Save Changes</Button>
       </div>
     </div>
   );

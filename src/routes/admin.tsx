@@ -30,6 +30,7 @@ import {
   normalizeStudentStatus,
   type StudentWorkflowStatus,
 } from "@/lib/student-status";
+import { isValidIndianMobile } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -752,6 +753,24 @@ function AdminStudentDetail({
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ ...student });
+  const [errors, setErrors] = useState<{ parentMobile?: string; emergencyContact?: string }>({});
+
+  const validateForm = () => {
+    const nextErrors: typeof errors = {};
+
+    if (!form.parentMobile.trim() || !isValidIndianMobile(form.parentMobile)) {
+      nextErrors.parentMobile =
+        "Mobile number should follow Indian standard: 10 digits starting with 6-9.";
+    }
+
+    if (form.emergencyContact.trim() && !isValidIndianMobile(form.emergencyContact)) {
+      nextErrors.emergencyContact =
+        "Emergency contact should be a valid Indian mobile number.";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
 
   return (
     <>
@@ -846,6 +865,7 @@ function AdminStudentDetail({
             <div className="space-y-2">
               <Label>Parent Mobile</Label>
               <Input value={form.parentMobile} onChange={(e) => setForm({ ...form, parentMobile: e.target.value })} className="bg-surface border-border" />
+              {errors.parentMobile && <p className="text-xs text-destructive">{errors.parentMobile}</p>}
             </div>
             <div className="sm:col-span-2 space-y-2">
               <Label>Address</Label>
@@ -854,11 +874,16 @@ function AdminStudentDetail({
             <div className="sm:col-span-2 space-y-2">
               <Label>Emergency Contact</Label>
               <Input value={form.emergencyContact} onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })} className="bg-surface border-border" />
+              {errors.emergencyContact && <p className="text-xs text-destructive">{errors.emergencyContact}</p>}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(false)}>Cancel</Button>
-            <Button variant="hero" onClick={() => { onSave(form); setEditing(false); }}>
+            <Button variant="hero" onClick={() => {
+              if (!validateForm()) return;
+              onSave(form);
+              setEditing(false);
+            }}>
               Save Changes
             </Button>
           </DialogFooter>

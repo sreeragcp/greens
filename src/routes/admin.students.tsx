@@ -26,6 +26,7 @@ import {
   normalizeStudentStatus,
   type StudentWorkflowStatus,
 } from "@/lib/student-status";
+import { isValidIndianMobile } from "@/lib/utils";
 import { getStudents, patchStudentStatus } from "@/service/admin";
 
 export const Route = createFileRoute("/admin/students")({
@@ -300,13 +301,13 @@ function AdminStudents() {
 
       // Title
       doc.setFontSize(16);
-      doc.setFont(undefined, "bold");
+      doc.setFont("helvetica", "bold");
       doc.text("Student Details Report", margin, yPosition);
       yPosition += 10;
 
       // Generated date
       doc.setFontSize(10);
-      doc.setFont(undefined, "normal");
+      doc.setFont("helvetica", "normal");
       doc.text(`Generated: ${new Date().toLocaleDateString()}`, margin, yPosition);
       yPosition += 8;
 
@@ -324,7 +325,7 @@ function AdminStudents() {
         doc.setFillColor(220, 220, 220);
         doc.rect(margin, yPosition - 5, contentWidth, 8, "F");
         doc.setFontSize(11);
-        doc.setFont(undefined, "bold");
+        doc.setFont("helvetica", "bold");
         doc.text(`${student.name} (ID: ${student.admissionNo})`, margin + 2, yPosition);
         yPosition += 10;
 
@@ -344,7 +345,7 @@ function AdminStudents() {
         const infoStartX = photoAdded ? margin + 30 : margin;
         const infoWidth = contentWidth - (photoAdded ? 30 : 0);
         doc.setFontSize(9);
-        doc.setFont(undefined, "normal");
+        doc.setFont("helvetica", "normal");
 
         const basicInfo = [
           `School: ${student.school}`,
@@ -373,15 +374,15 @@ function AdminStudents() {
         ];
 
         doc.setFontSize(8);
-        doc.setFont(undefined, "bold");
+        doc.setFont("helvetica", "bold");
         details.forEach(([label, value]) => {
           if (yPosition > pageHeight - pageBottomMargin) {
             doc.addPage();
             yPosition = margin;
           }
-          doc.setFont(undefined, "bold");
+          doc.setFont("helvetica", "bold");
           doc.text(`${label}:`, margin + 2, yPosition);
-          doc.setFont(undefined, "normal");
+          doc.setFont("helvetica", "normal");
           const wrappedText = doc.splitTextToSize(value || "—", contentWidth - 40);
           doc.text(wrappedText, margin + 40, yPosition);
           yPosition += Math.max(lineHeight, wrappedText.length * 3.5);
@@ -644,6 +645,29 @@ function AdminEditForm({ student, onSave, onCancel }: {
   onCancel: () => void;
 }) {
   const [form, setForm] = useState({ ...student });
+  const [errors, setErrors] = useState<{ parentMobile?: string; emergencyContact?: string }>({});
+
+  const validateForm = () => {
+    const nextErrors: typeof errors = {};
+    if (!form.parentMobile.trim() || !isValidIndianMobile(form.parentMobile)) {
+      nextErrors.parentMobile =
+        "Mobile number should follow Indian standard: 10 digits starting with 6-9.";
+    }
+    if (form.emergencyContact.trim() && !isValidIndianMobile(form.emergencyContact)) {
+      nextErrors.emergencyContact =
+        "Emergency contact should be a valid Indian mobile number.";
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSave = () => {
+    if (!validateForm()) {
+      toast.error("Please fix invalid mobile numbers before saving.");
+      return;
+    }
+    onSave(form);
+  };
 
   return (
     <>
@@ -709,6 +733,7 @@ function AdminEditForm({ student, onSave, onCancel }: {
         <div className="space-y-2">
           <Label>Parent Mobile</Label>
           <Input type="tel" value={form.parentMobile} onChange={(e) => setForm({ ...form, parentMobile: e.target.value })} className="bg-surface border-border" />
+          {errors.parentMobile && <p className="text-xs text-destructive">{errors.parentMobile}</p>}
         </div>
         <div className="space-y-2 sm:col-span-2">
           <Label>Address</Label>
@@ -717,12 +742,13 @@ function AdminEditForm({ student, onSave, onCancel }: {
         <div className="space-y-2">
           <Label>Emergency Contact</Label>
           <Input type="tel" value={form.emergencyContact} onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })} className="bg-surface border-border" />
+          {errors.emergencyContact && <p className="text-xs text-destructive">{errors.emergencyContact}</p>}
         </div>
       </div>
 
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>Cancel</Button>
-        <Button variant="hero" onClick={() => onSave(form)}>Save Changes</Button>
+        <Button variant="hero" onClick={handleSave}>Save Changes</Button>
       </DialogFooter>
     </>
   );

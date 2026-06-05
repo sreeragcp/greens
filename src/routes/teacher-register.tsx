@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { isValidIndianMobile } from "@/lib/utils";
 import {
   GraduationCap,
   School,
@@ -135,8 +136,8 @@ function TeacherRegister() {
       e.teacherName = "Enter your full name";
     if (!profile.classGrade) e.classGrade = "Select class";
     if (!profile.division) e.division = "Select division";
-    if (!/^[0-9]{10}$/.test(profile.mobile.replace(/\D/g, "").slice(-10)))
-      e.mobile = "Enter a valid 10-digit mobile number";
+    if (!isValidIndianMobile(profile.mobile))
+      e.mobile = "Enter a valid Indian mobile number starting with 6-9.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email))
       e.email = "Enter a valid email";
     setErrors(e);

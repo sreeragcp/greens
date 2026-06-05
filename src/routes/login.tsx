@@ -20,6 +20,7 @@ import parentChild from "@/assets/parent-child.jpg";
 import teacherClassroom from "@/assets/teacher-classroom.jpg";
 import adminOffice from "@/assets/admin-office.jpg";
 import { handleLogin, handleLoginOtpVerify } from "@/service/auth";
+import { isValidIndianMobile } from "@/lib/utils";
 import { login } from "@/redux/authSlice";
 import { AppDispatch } from "@/redux/store";
 
@@ -329,10 +330,9 @@ function LoginPage() {
                     size="lg"
                     className="w-full"
                     onClick={async () => {
-                      const digits = phoneNumber.replace(/\D/g, "");
-                      if (digits.length < 10) {
+                      if (!isValidIndianMobile(phoneNumber)) {
                         toast.error(
-                          "Please enter a valid 10-digit mobile number",
+                          "Mobile number should follow Indian standard: 10 digits starting with 6-9.",
                         );
                         return;
                       }
