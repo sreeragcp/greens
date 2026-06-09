@@ -19,7 +19,7 @@ import {
 import parentChild from "@/assets/parent-child.jpg";
 import teacherClassroom from "@/assets/teacher-classroom.jpg";
 import adminOffice from "@/assets/admin-office.jpg";
-import { handleLogin, handleLoginOtpVerify } from "@/service/auth";
+import { handleLoginWithPassword } from "@/service/auth";
 import { isValidIndianMobile } from "@/lib/utils";
 import { login } from "@/redux/authSlice";
 import { AppDispatch } from "@/redux/store";
@@ -28,7 +28,7 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-type Role = "parent" | "teacher" | "admin";
+type Role = "teacher" | "admin";
 
 const roles: {
   id: Role;
@@ -37,13 +37,6 @@ const roles: {
   description: string;
   redirect: string;
 }[] = [
-  {
-    id: "parent",
-    label: "Parent",
-    icon: Users,
-    description: "View & verify your child's ID details",
-    redirect: "/parent",
-  },
   {
     id: "teacher",
     label: "Teacher",
@@ -70,19 +63,6 @@ const roleVisuals: Record<
     subline: string;
   }
 > = {
-  parent: {
-    image: parentChild,
-    alt: "Happy parent and child reviewing student details on a phone",
-    tagline: "Parent Portal Access",
-    headline: (
-      <>
-        Stay connected to your{" "}
-        <span className="gradient-text">child's school journey</span>
-      </>
-    ),
-    subline:
-      "Verify ID details, download official cards, and approve updates — all from your phone with a secure OTP.",
-  },
   teacher: {
     image: teacherClassroom,
     alt: "Teacher engaging with students in a bright modern classroom",
@@ -94,7 +74,7 @@ const roleVisuals: Record<
       </>
     ),
     subline:
-      "Enter student details, review parent confirmations, and finalize ID cards for your assigned class & division.",
+      "Enter student details, review confirmations, and finalize ID cards for your assigned class & division.",
   },
   admin: {
     image: adminOffice,
@@ -113,76 +93,14 @@ const roleVisuals: Record<
 
 function LoginPage() {
   const dispatch = useDispatch<AppDispatch>();
-  const [selectedRole, setSelectedRole] = useState<Role>("parent");
-  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [selectedRole, setSelectedRole] = useState<Role>("teacher");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [password, setPassword] = useState("");
   const navigate = useNavigate();
-
-  const [resendTimer, setResendTimer] = useState(0);
 
   const handleRoleChange = (id: Role) => {
     setSelectedRole(id);
-    setStep("phone");
-    setOtp(["", "", "", "", "", ""]);
-  };
-
-  const startResendCountdown = () => setResendTimer(300);
-
-  const handleResendOtp = async () => {
-    if (!phoneNumber || resendTimer > 0) return;
-
-    try {
-      const res = await handleLogin(phoneNumber, selectedRole.toUpperCase());
-      const success =
-        res === true || res?.status === true || res?.success === true;
-
-      if (success) {
-        toast.success(`OTP resent to ${phoneNumber}`, {
-          description: "Please check your phone for the new code.",
-        });
-        startResendCountdown();
-      } else {
-        toast.error(
-          res?.error || res?.message || "Unable to resend OTP. Please try again.",
-        );
-      }
-    } catch (error: any) {
-      const msg =
-        error?.error ||
-        error?.message ||
-        (error && JSON.stringify(error)) ||
-        "Unable to resend OTP. Please try again.";
-      toast.error(msg);
-    }
-  };
-
-  useEffect(() => {
-    if (resendTimer <= 0) return;
-
-    const interval = window.setInterval(() => {
-      setResendTimer((prev) => Math.max(prev - 1, 0));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [resendTimer]);
-
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return;
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-    if (value && index < 5) {
-      const next = document.getElementById(`otp-${index + 1}`);
-      next?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
-      const prev = document.getElementById(`otp-${index - 1}`);
-      prev?.focus();
-    }
+    setPassword("");
   };
 
   const currentRole = roles.find((r) => r.id === selectedRole)!;
@@ -193,7 +111,7 @@ function LoginPage() {
       <Header />
       <div className="container mx-auto grid lg:grid-cols-2 gap-8 lg:gap-10 px-4 sm:px-6 pt-24 pb-10 lg:pt-28 lg:pb-12 items-center">
         {/* LEFT - imagery */}
-        <aside className="hidden lg:flex flex-col gap-6 animate-slide-in-left">
+          <aside className="hidden lg:flex flex-col gap-6 animate-slide-in-left">
           <div className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-4 py-1.5 transition-all duration-300">
             <Sparkles size={14} className="text-primary" />
             <span className="text-xs font-medium text-primary">
@@ -223,36 +141,36 @@ function LoginPage() {
               className="w-full h-auto object-cover transition-opacity duration-500 animate-fade-in"
             />
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="glass-card rounded-xl p-3 text-center">
-              <ShieldCheck size={18} className="mx-auto text-primary mb-1" />
-              <p className="text-xs font-semibold">Secure</p>
-              <p className="text-[10px] text-muted-foreground">OTP verified</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="glass-card rounded-xl p-3 text-center">
+                <ShieldCheck size={18} className="mx-auto text-primary mb-1" />
+                <p className="text-xs font-semibold">Secure</p>
+                <p className="text-[10px] text-muted-foreground">Password protected</p>
+              </div>
+              <div className="glass-card rounded-xl p-3 text-center">
+                <BookOpen size={18} className="mx-auto text-primary mb-1" />
+                <p className="text-xs font-semibold">Simple</p>
+                <p className="text-[10px] text-muted-foreground">Use your password</p>
+              </div>
+              <div className="glass-card rounded-xl p-3 text-center">
+                <Users size={18} className="mx-auto text-primary mb-1" />
+                <p className="text-xs font-semibold">All roles</p>
+                <p className="text-[10px] text-muted-foreground">One login</p>
+              </div>
             </div>
-            <div className="glass-card rounded-xl p-3 text-center">
-              <BookOpen size={18} className="mx-auto text-primary mb-1" />
-              <p className="text-xs font-semibold">Simple</p>
-              <p className="text-[10px] text-muted-foreground">No passwords</p>
-            </div>
-            <div className="glass-card rounded-xl p-3 text-center">
-              <Users size={18} className="mx-auto text-primary mb-1" />
-              <p className="text-xs font-semibold">All roles</p>
-              <p className="text-[10px] text-muted-foreground">One login</p>
-            </div>
-          </div>
         </aside>
 
         {/* RIGHT - form */}
         <div className="w-full max-w-md mx-auto lg:mx-0 animate-fade-up">
-          <div className="text-center lg:text-left mb-8">
+          <div className="text-center mb-8">
             <h1 className="text-3xl font-bold">Welcome back</h1>
             <p className="text-muted-foreground mt-2">
-              Sign in securely with mobile OTP
+              Sign in with mobile number and password
             </p>
           </div>
 
           {/* Role selector */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-8">
+          <div className="flex justify-center gap-3 mb-8">
             {roles.map((role) => (
               <button
                 key={role.id}
@@ -284,7 +202,7 @@ function LoginPage() {
               </p>
             </div>
 
-            {selectedRole === "teacher" && step === "phone" && (
+            {selectedRole === "teacher" && (
               <div className="mb-4 rounded-xl bg-primary/5 border border-primary/15 p-3 text-xs text-center text-muted-foreground">
                 New teacher?{" "}
                 <Link
@@ -295,253 +213,152 @@ function LoginPage() {
                 </Link>
               </div>
             )}
-
             <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-              {step === "phone" ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-sm">
-                      Mobile Number
-                    </Label>
-                    <div className="relative">
-                      <Phone
-                        size={16}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      />
-                      <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="+91 XXXXX XXXXX"
-                        value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value)}
-                        className="bg-surface border-border focus:border-primary pl-10"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {selectedRole === "parent"
-                        ? "Enter the mobile number registered with the school"
-                        : selectedRole === "teacher"
-                          ? "Enter your registered teacher mobile number"
-                          : "Enter your authorized admin mobile number"}
-                    </p>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-sm">
+                    Mobile Number
+                  </Label>
+                  <div className="relative">
+                    <Phone
+                      size={16}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="+91 XXXXX XXXXX"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      className="bg-surface border-border focus:border-primary pl-10"
+                    />
                   </div>
-                  <Button
-                    variant="hero"
-                    size="lg"
-                    className="w-full"
-                    onClick={async () => {
-                      if (!isValidIndianMobile(phoneNumber)) {
-                        toast.error(
-                          "Mobile number should follow Indian standard: 10 digits starting with 6-9.",
-                        );
+                  <p className="text-xs text-muted-foreground">
+                    {selectedRole === "teacher"
+                      ? "Enter your registered teacher mobile number"
+                      : "Enter your authorized admin mobile number"}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm">
+                    Password
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-surface border-border"
+                  />
+                </div>
+
+                <Button
+                  variant="hero"
+                  size="lg"
+                  className="w-full"
+                  onClick={async () => {
+                    if (!isValidIndianMobile(phoneNumber)) {
+                      toast.error(
+                        "Mobile number should follow Indian standard: 10 digits starting with 6-9.",
+                      );
+                      return;
+                    }
+
+                    if (!password || password.length < 6) {
+                      toast.error("Please enter your password (min 6 characters)");
+                      return;
+                    }
+
+                    try {
+                      const role = selectedRole.toUpperCase();
+                      const res = await handleLoginWithPassword(phoneNumber, password, role);
+
+                      const accessToken = res?.data?.tokens?.access || res?.access || res?.data?.access || "";
+                      const refreshToken = res?.data?.tokens?.refresh || res?.refresh || res?.data?.refresh || "";
+                      const user = res?.data?.user || res?.user || null;
+
+                      const success = res?.status === true || !!accessToken;
+
+                      if (!success) {
+                        toast.error(res?.error || res?.message || "Login failed. Please check your credentials.");
                         return;
                       }
 
-                      try {
-                        const role = selectedRole.toUpperCase();
-                        const res = await handleLogin(phoneNumber, role);
-                        console.log(res, "RRRRRRRRRRRR");
-
-                        const success =
-                          res === true ||
-                          res?.status === true ||
-                          res?.success === true;
-
-                        if (success) {
-                          toast.success(`OTP sent to ${phoneNumber}`, {
-                            description:
-                              "Use any 6 digits to continue (demo mode).",
-                          });
-                          setStep("otp");
-                          startResendCountdown();
-                        } else {
-                          toast.error(
-                            "Unable to send OTP for this role. Please try again.",
-                          );
-                        }
-                      } catch (error: any) {
-                        const msg =
-                          error?.message ||
-                          (error && JSON.stringify(error)) ||
-                          "Unable to send OTP. Please try again.";
-                        toast.error(msg);
-                      }
-                    }}
-                  >
-                    Send OTP <ArrowRight size={16} />
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="space-y-3">
-                    <Label className="text-sm">
-                      Enter OTP sent to {phoneNumber || "+91 XXXXX"}
-                    </Label>
-                    <div className="flex justify-center gap-1.5 sm:gap-2">
-                      {otp.map((digit, i) => (
-                        <input
-                          key={i}
-                          id={`otp-${i}`}
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={1}
-                          value={digit}
-                          onChange={(e) => handleOtpChange(i, e.target.value)}
-                          onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                          className="w-9 h-11 sm:w-11 sm:h-12 text-center text-base sm:text-lg font-bold rounded-lg border border-border bg-surface text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
-                        />
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground text-center">
-                      Didn't receive?{" "}
-                      <button
-                        type="button"
-                        className={`text-primary ${resendTimer > 0 ? "opacity-50 cursor-not-allowed" : "hover:underline"}`}
-                        onClick={handleResendOtp}
-                        disabled={resendTimer > 0}
-                      >
-                        {resendTimer > 0
-                          ? `Resend OTP (${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, "0")})`
-                          : "Resend OTP"}
-                      </button>
-                    </p>
-                  </div>
-                  <Button
-                    variant="hero"
-                    size="lg"
-                    className="w-full"
-                    onClick={async () => {
-                      if (otp.join("").length < 6) {
-                        toast.error("Please enter the full 6-digit OTP");
-                        return;
+                      if (accessToken && user) {
+                        dispatch(
+                          login({
+                            accessToken,
+                            refreshToken,
+                            user,
+                          }),
+                        );
                       }
 
-                      try {
-                        const code = otp.join("");
+                      if (selectedRole === "teacher") {
+                        const teacherProfile =
+                          res?.profile || res?.teacher || res?.data?.teacher || res?.data?.profile || null;
 
-                        const res = await handleLoginOtpVerify(
-                          phoneNumber,
-                          code,
-                          selectedRole.toUpperCase(),
-                        );
-
-                        console.log(
-                          res,
-                          "this is the response from the verify otp",
-                        );
-
-                        // API response structure:
-                        // {
-                        //   status: true,
-                        //   message: "Success",
-                        //   data: {
-                        //     tokens: { access, refresh },
-                        //     user: {}
-                        //   }
-                        // }
-
-                        const accessToken = res?.data?.tokens?.access || "";
-                        const refreshToken = res?.data?.tokens?.refresh || "";
-                        const user = res?.data?.user || null;
-
-                        const success = res?.status === true;
-
-                        if (!success) {
-                          toast.error(
-                            res?.error || res?.message || "OTP verification failed. Please try again.",
-                          );
-                          return;
-                        }
-
-                        if (accessToken && user) {
-                          dispatch(
-                            login({
-                              accessToken,
-                              refreshToken,
-                              user,
-                            }),
-                          );
-                        }
-
-                        if (selectedRole === "teacher") {
-                          const teacherProfile =
-                            res?.profile ||
-                            res?.teacher ||
-                            res?.data?.teacher ||
-                            res?.data?.profile ||
-                            null;
-
-                          try {
-                            if (teacherProfile) {
-                              const normalized = {
-                                schoolName:
-                                  teacherProfile.schoolName ||
-                                  teacherProfile.school_name ||
-                                  teacherProfile.school ||
-                                  "",
-                                teacherName:
-                                  teacherProfile.name ||
-                                  teacherProfile.teacherName ||
-                                  teacherProfile.first_name ||
-                                  phoneNumber,
-                                classGrade:
-                                  teacherProfile.class ||
-                                  teacherProfile.classGrade ||
-                                  "",
-                                division: teacherProfile.division || "",
-                                mobile: teacherProfile.phone || phoneNumber,
-                                email: teacherProfile.email || "",
-                              };
-                              localStorage.setItem(
-                                "markone.teacherProfile",
-                                JSON.stringify(normalized),
-                              );
-                            } else {
-                              const placeholder = {
-                                schoolName: "",
-                                teacherName: phoneNumber,
-                                classGrade: "",
-                                division: "",
-                                mobile: phoneNumber,
-                                email: "",
-                              };
-                              localStorage.setItem(
-                                "markone.teacherProfile",
-                                JSON.stringify(placeholder),
-                              );
-                            }
-                          } catch {
-                            // ignore storage errors
+                        try {
+                          if (teacherProfile) {
+                            const normalized = {
+                              schoolName:
+                                teacherProfile.schoolName ||
+                                teacherProfile.school_name ||
+                                teacherProfile.school ||
+                                "",
+                              teacherName:
+                                teacherProfile.name ||
+                                teacherProfile.teacherName ||
+                                teacherProfile.first_name ||
+                                phoneNumber,
+                              classGrade:
+                                teacherProfile.class ||
+                                teacherProfile.classGrade ||
+                                "",
+                              division: teacherProfile.division || "",
+                              mobile: teacherProfile.phone || phoneNumber,
+                              email: teacherProfile.email || "",
+                            };
+                            localStorage.setItem(
+                              "markone.teacherProfile",
+                              JSON.stringify(normalized),
+                            );
+                          } else {
+                            const placeholder = {
+                              schoolName: "",
+                              teacherName: phoneNumber,
+                              classGrade: "",
+                              division: "",
+                              mobile: phoneNumber,
+                              email: "",
+                            };
+                            localStorage.setItem(
+                              "markone.teacherProfile",
+                              JSON.stringify(placeholder),
+                            );
                           }
-
-                          toast.success(`Welcome back, ${currentRole.label}!`);
-                          navigate({ to: currentRole.redirect });
-                          return;
+                        } catch {
+                          // ignore storage errors
                         }
 
                         toast.success(`Welcome back, ${currentRole.label}!`);
                         navigate({ to: currentRole.redirect });
-                      } catch (err: any) {
-                        const msg =
-                          err?.error ||
-                          err?.message ||
-                          (err && JSON.stringify(err)) ||
-                          "OTP verification failed";
-                        toast.error(msg);
+                        return;
                       }
-                    }}
-                  >
-                    Verify & Login as {currentRole.label}
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() => setStep("phone")}
-                    className="w-full text-sm text-muted-foreground hover:text-foreground text-center"
-                  >
-                    ← Change number
-                  </button>
-                </>
-              )}
+
+                      toast.success(`Welcome back, ${currentRole.label}!`);
+                      navigate({ to: currentRole.redirect });
+                    } catch (err: any) {
+                      const msg = err?.error || err?.message || (err && JSON.stringify(err)) || "Login failed";
+                      toast.error(msg);
+                    }
+                  }}
+                >
+                  Sign in <ArrowRight size={16} />
+                </Button>
+              </>
             </form>
           </div>
         </div>

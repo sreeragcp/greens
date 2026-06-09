@@ -331,18 +331,54 @@ function AdminDashboard() {
       setLoadingDashboard(true);
       try {
         const data = await getAdminDashboard();
-        console.log(data,"this is the data from the admin dashboard api");
-        
+        console.log(data, "this is the data from the admin dashboard api");
+
         if (!mounted) return;
 
-        if (Array.isArray(data?.stats)) {
-          setStatsData(data.stats);
+        const payload = data?.data ?? data;
+        const statCards = Array.isArray(payload?.stat_cards)
+          ? payload.stat_cards
+          : Array.isArray(payload?.stats)
+          ? payload.stats
+          : [];
+
+        const mapToneToColor = (tone: string | undefined) => {
+          switch (tone) {
+            case "positive":
+              return "text-emerald-400";
+            case "negative":
+              return "text-destructive";
+            case "neutral":
+            default:
+              return "text-yellow-400";
+          }
+        };
+
+        if (statCards.length > 0) {
+          setStatsData(
+            statCards.map((card: any) => ({
+              label: card.label || card.key || "-",
+              value: String(card.value ?? "0"),
+              icon:
+                card.key === "total_schools"
+                  ? School
+                  : card.key === "total_students"
+                  ? Users
+                  : card.key === "cards_generated"
+                  ? CreditCard
+                  : Activity,
+              trend: card.delta?.value !== undefined
+                ? `${card.delta.value > 0 ? "+" : ""}${card.delta.value} ${card.delta.label || ""}`.trim()
+                : card.delta?.label || "",
+              color: mapToneToColor(card.delta?.tone),
+            }))
+          );
         }
 
-        if (Array.isArray(data?.recent_activity)) {
-          setActivityData(data.recent_activity);
-        } else if (Array.isArray(data?.recentActivity)) {
-          setActivityData(data.recentActivity);
+        if (Array.isArray(payload?.recent_activity)) {
+          setActivityData(payload.recent_activity);
+        } else if (Array.isArray(payload?.recentActivity)) {
+          setActivityData(payload.recentActivity);
         }
 
         // Prefer fetching full schools list from the schools API
@@ -395,34 +431,48 @@ function AdminDashboard() {
           console.warn("Could not fetch full students list:", err);
         }
 
-        if (typeof data?.total_schools !== "undefined" || typeof data?.totalSchools !== "undefined" || typeof data?.schools_count !== "undefined") {
+        if (statCards.length === 0) {
+          const payload = data?.data ?? data;
+          const totals = payload?.totals || {};
           setStatsData([
             {
               label: "Total Schools",
-              value: String(data.total_schools ?? data.totalSchools ?? data.schools_count ?? stats[0].value),
+              value: String(totals.schools ?? payload?.total_schools ?? payload?.totalSchools ?? stats[0].value),
               icon: School,
-              trend: data.total_schools_trend || data.totalSchoolsTrend || stats[0].trend,
+              trend: payload?.stat_cards?.find((card: any) => card.key === "total_schools")?.delta?.value
+                ? `${payload.stat_cards.find((card: any) => card.key === "total_schools").delta.value > 0 ? "+" : ""}${payload.stat_cards.find((card: any) => card.key === "total_schools").delta.value} ${payload.stat_cards.find((card: any) => card.key === "total_schools").delta.label || ""}`.trim()
+                : stats[0].trend,
               color: "text-primary",
             },
             {
               label: "Total Students",
-              value: String(data.total_students ?? data.totalStudents ?? data.students_count ?? stats[1].value),
+              value: String(totals.students ?? payload?.total_students ?? payload?.totalStudents ?? stats[1].value),
               icon: Users,
-              trend: data.total_students_trend || data.totalStudentsTrend || stats[1].trend,
+              trend: payload?.stat_cards?.find((card: any) => card.key === "total_students")?.delta?.value
+                ? `${payload.stat_cards.find((card: any) => card.key === "total_students").delta.value > 0 ? "+" : ""}${payload.stat_cards.find((card: any) => card.key === "total_students").delta.value} ${payload.stat_cards.find((card: any) => card.key === "total_students").delta.label || ""}`.trim()
+                : stats[1].trend,
               color: "text-blue-400",
             },
             {
               label: "Pending Approvals",
-              value: String(data.pending_approvals ?? data.pendingApprovals ?? data.pending_approval_count ?? stats[2].value),
+              value: String(
+                totals.students_by_status?.PENDING_TEACHER ??
+                payload?.pending_teacher ??
+                payload?.pending_approvals ??
+                payload?.pendingApprovals ??
+                stats[2].value,
+              ),
               icon: Activity,
-              trend: data.pending_approvals_trend || data.pendingApprovalsTrend || stats[2].trend,
+              trend: payload?.stat_cards?.find((card: any) => card.key === "pending_approvals")?.delta?.label || stats[2].trend,
               color: "text-yellow-400",
             },
             {
               label: "Cards Generated",
-              value: String(data.cards_generated ?? data.cardsGenerated ?? data.cards_count ?? stats[3].value),
+              value: String(totals.id_cards_issued ?? payload?.cards_generated ?? payload?.cardsGenerated ?? payload?.cards_count ?? stats[3].value),
               icon: CreditCard,
-              trend: data.cards_generated_trend || data.cardsGeneratedTrend || stats[3].trend,
+              trend: payload?.stat_cards?.find((card: any) => card.key === "cards_generated")?.delta?.value
+                ? `${payload.stat_cards.find((card: any) => card.key === "cards_generated").delta.value > 0 ? "+" : ""}${payload.stat_cards.find((card: any) => card.key === "cards_generated").delta.value} ${payload.stat_cards.find((card: any) => card.key === "cards_generated").delta.label || ""}`.trim()
+                : stats[3].trend,
               color: "text-emerald-400",
             },
           ]);

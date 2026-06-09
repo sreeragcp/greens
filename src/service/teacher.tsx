@@ -4,18 +4,24 @@ import axiosInstance from "./axios";
 
 export const teacherRegistration = async (teacherData: any) => {
   try {
+    const payload: any = {
+      phone: teacherData.phone,
+      first_name: teacherData.first_name,
+      last_name: teacherData.last_name,
+      email: teacherData.email,
+      role: "TEACHER",
+      school: teacherData.school || "",
+      division: teacherData.division || "",
+      class_name: teacherData.class || "",
+    };
+
+    if (teacherData.password) {
+      payload.password = teacherData.password;
+    }
+
     const response = await axios.post(
-      `${import.meta.env.VITE_API_BASE_URL}/auth/otp/register/`,
-      {
-        phone: teacherData.phone,
-        first_name: teacherData.first_name,
-        last_name: teacherData.last_name,
-        email: teacherData.email,
-        role: "TEACHER",
-        school: teacherData.school || "",
-        division: teacherData.division || "",
-        class_name: teacherData.class || "",
-      }
+      `${import.meta.env.VITE_API_BASE_URL}/auth/register/`,
+      payload
     );
 
     return response.data;
@@ -60,20 +66,36 @@ const dataURLtoBlob = (dataUrl: string) => {
 
 export const createStudent = async (studentData: {
   full_name: string;
+  teacher_name?: string;
+  admission_no?: string;
   school: string | number;
   guardian_phone: string;
+  guardian_name?: string;
   class_name: string;
   division: string;
+  date_of_birth?: string;
+  blood_group?: string;
+  gender?: string;
+  address?: string;
+  emergency_contact?: string;
   status: string;
   photo?: string | null;
 }) => {
   try {
     const formData = new FormData();
     formData.append("full_name", studentData.full_name);
+    if (studentData.teacher_name) formData.append("teacher_name", studentData.teacher_name);
+    if (studentData.admission_no) formData.append("admission_no", studentData.admission_no);
     formData.append("school", String(studentData.school));
     formData.append("guardian_phone", studentData.guardian_phone);
+    if (studentData.guardian_name) formData.append("guardian_name", studentData.guardian_name);
     formData.append("class_name", studentData.class_name);
     formData.append("division", studentData.division);
+    if (studentData.date_of_birth) formData.append("date_of_birth", studentData.date_of_birth);
+    if (studentData.blood_group) formData.append("blood_group", studentData.blood_group);
+    if (studentData.gender) formData.append("gender", studentData.gender);
+    if (studentData.address) formData.append("address", studentData.address);
+    if (studentData.emergency_contact) formData.append("emergency_contact", studentData.emergency_contact);
     formData.append("status", studentData.status);
 
     if (studentData.photo) {
@@ -105,10 +127,18 @@ export const updateStudent = async (
   id: string | number,
   studentData: {
     full_name: string;
+    teacher_name?: string;
+    admission_no?: string;
     school: string | number;
     guardian_phone: string;
+    guardian_name?: string;
     class_name: string;
     division: string;
+    date_of_birth?: string;
+    blood_group?: string;
+    gender?: string;
+    address?: string;
+    emergency_contact?: string;
     status?: string;
     photo?: string | null;
   }
@@ -116,10 +146,18 @@ export const updateStudent = async (
   try {
     const formData = new FormData();
     formData.append("full_name", studentData.full_name);
+    if (studentData.teacher_name) formData.append("teacher_name", studentData.teacher_name);
+    if (studentData.admission_no) formData.append("admission_no", studentData.admission_no);
     formData.append("school", String(studentData.school));
     formData.append("guardian_phone", studentData.guardian_phone);
+    if (studentData.guardian_name) formData.append("guardian_name", studentData.guardian_name);
     formData.append("class_name", studentData.class_name);
     formData.append("division", studentData.division);
+    if (studentData.date_of_birth) formData.append("date_of_birth", studentData.date_of_birth);
+    if (studentData.blood_group) formData.append("blood_group", studentData.blood_group);
+    if (studentData.gender) formData.append("gender", studentData.gender);
+    if (studentData.address) formData.append("address", studentData.address);
+    if (studentData.emergency_contact) formData.append("emergency_contact", studentData.emergency_contact);
     if (studentData.status) {
       formData.append("status", studentData.status);
     }

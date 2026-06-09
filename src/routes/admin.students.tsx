@@ -19,17 +19,21 @@ import {
   Camera,
   Upload,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   User as UserIcon,
   ThumbsUp,
   XCircle,
   Download as DownloadIcon,
+  UserPlus,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
 import { jsPDF } from "jspdf";
 import { adminSidebar } from "@/lib/nav";
 import { ConfirmActionDialog } from "@/components/ConfirmActionDialog";
+import { AdminAddStudentForm } from "@/components/AdminAddStudentForm";
 import {
   getStatusBadgeClass,
   getStatusLabel,
@@ -37,7 +41,7 @@ import {
   type StudentWorkflowStatus,
 } from "@/lib/student-status";
 import { isValidIndianMobile } from "@/lib/utils";
-import { getStudents, patchStudentStatus } from "@/service/admin";
+import { getStudents, patchStudentStatus, getMasterData, createStudent } from "@/service/admin";
 
 export const Route = createFileRoute("/admin/students")({
   component: AdminStudents,
@@ -59,6 +63,24 @@ type Student = {
   photo: string | null;
   school: string;
   uploadedBy: string;
+  status: StudentWorkflowStatus;
+};
+
+type StudentEntry = {
+  id: number;
+  name: string;
+  teacherName: string;
+  admissionNo: string;
+  class: string;
+  division: string;
+  dob: string;
+  bloodGroup: string;
+  gender: string;
+  parentName: string;
+  parentMobile: string;
+  address: string;
+  emergencyContact: string;
+  photo: string | null;
   status: StudentWorkflowStatus;
 };
 
@@ -202,13 +224,60 @@ function AdminStudents() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const pdfContentRef = useRef<HTMLDivElement>(null);
+  const [masterSchools, setMasterSchools] = useState<any[]>([]);
+  const [masterClasses, setMasterClasses] = useState<any[]>([]);
+  const [masterDivisions, setMasterDivisions] = useState<string[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addSchool, setAddSchool] = useState("");
+  const [addClass, setAddClass] = useState("");
+  const [addDivision, setAddDivision] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    const loadMasterData = async () => {
+      try {
+        const masterData = await getMasterData();
+        if (mounted) {
+          // Parse schools - keep the full object for cascading
+          const schoolsList = Array.isArray(masterData?.data?.schools)
+            ? masterData.data.schools
+            : Array.isArray(masterData?.schools)
+            ? masterData.schools
+            : [];
+          setMasterSchools(schoolsList);
+          setMasterClasses([]); // Reset classes on master data load
+          setMasterDivisions([]); // Reset divisions on master data load
+        }
+      } catch (err) {
+        console.warn("Failed to load master data:", err);
+      }
+    };
+    loadMasterData();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     const loadStudents = async () => {
       setLoading(true);
       try {
-        const res = await getStudents();
+        // Build filter params
+        const filterParams: any = {};
+        if (schoolFilter) {
+          const school = masterSchools.find((s: any) => s.name === schoolFilter);
+          if (school?.id) filterParams.school = school.id;
+        }
+        if (classFilter) {
+          const classObj = masterClasses.find((c: any) => c.label === classFilter);
+          if (classObj?.class_name) filterParams.class_name = classObj.class_name;
+        }
+        if (divisionFilter) {
+          filterParams.division = divisionFilter;
+        }
+
+        const res = await getStudents(filterParams);
         const items = Array.isArray(res)
           ? res
           : Array.isArray(res?.results)
@@ -228,7 +297,7 @@ function AdminStudents() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [schoolFilter, classFilter, divisionFilter, masterSchools, masterClasses]);
 
   const showConfirm = (
     title: string,
@@ -256,10 +325,10 @@ function AdminStudents() {
   const handleApprove = (student: Student) => {
     showConfirm(
       "Approve student",
-      `Approve ${student.name} and mark the application as fully approved?`,
+      `Approve ${student.name} and mark the application as approved?`,
       async () => {
-        await patchStudentStatus(student.id, "APPROVED");
-        const updated = { ...student, status: "APPROVED" as const };
+        await patchStudentStatus(student.id, "APPROVE");
+        const updated = { ...student, status: "APPROVE" as any };
         setStudents(students.map((s) => (s.id === student.id ? updated : s)));
         setSelected(updated);
         toast.success(`${student.name} approved`);
@@ -270,7 +339,22 @@ function AdminStudents() {
   const handleReject = (student: Student) => {
     showConfirm(
       "Reject student",
-      `Reject ${student.name} and send back to the teacher for review?`,
+      `Reject ${student.name} and mark the application as rejected?`,
+      async () => {
+        await patchStudentStatus(student.id, "REJECTED");
+        const updated = { ...student, status: "REJECTED" as any };
+        setStudents(students.map((s) => (s.id === student.id ? updated : s)));
+        setSelected(updated);
+        toast.success(`${student.name} rejected`);
+      },
+      true,
+    );
+  };
+
+  const handleRevert = (student: Student) => {
+    showConfirm(
+      "Revert to teacher",
+      `Send ${student.name} back to teacher for corrections?`,
       async () => {
         await patchStudentStatus(student.id, "PENDING_TEACHER");
         const updated = { ...student, status: "PENDING_TEACHER" as const };
@@ -278,28 +362,77 @@ function AdminStudents() {
         setSelected(updated);
         toast.success(`${student.name} sent back to teacher`);
       },
-      true,
     );
   };
 
-  const schools = useMemo(
-    () => Array.from(new Set(students.map((s) => s.school))),
-    [students],
-  );
-  const classes = useMemo(
-    () =>
-      Array.from(new Set(students.map((s) => s.class))).sort((a, b) =>
-        a.localeCompare(b, undefined, { numeric: true }),
-      ),
-    [students],
-  );
-  const divisions = useMemo(
-    () =>
-      Array.from(new Set(students.map((s) => s.division))).sort((a, b) =>
-        a.localeCompare(b, undefined, { numeric: true }),
-      ),
-    [students],
-  );
+  const handleIdCardIssued = (student: Student) => {
+    showConfirm(
+      "Mark ID card issued",
+      `Mark ID card issued for ${student.name}?`,
+      async () => {
+        await patchStudentStatus(student.id, "ID_CARD_ISSUED");
+        const updated = { ...student, status: "ID_CARD_ISSUED" as any };
+        setStudents(students.map((s) => (s.id === student.id ? updated : s)));
+        setSelected(updated);
+        toast.success(`ID card marked as issued for ${student.name}`);
+      },
+    );
+  };
+
+  const handleSchoolFilterChange = (schoolName: string) => {
+    setSchoolFilter(schoolName);
+    setClassFilter(""); // Reset class filter
+    setDivisionFilter(""); // Reset division filter
+    
+    // Get classes for selected school
+    if (schoolName) {
+      const school = masterSchools.find((s: any) => s.name === schoolName);
+      const classes = school?.classes || [];
+      setMasterClasses(classes);
+      setMasterDivisions([]);
+    } else {
+      setMasterClasses([]);
+      setMasterDivisions([]);
+    }
+  };
+
+  const handleAddSchoolChange = (schoolName: string) => {
+    setAddSchool(schoolName);
+    setAddClass("");
+    setAddDivision("");
+    
+    if (schoolName) {
+      const school = masterSchools.find((s: any) => s.name === schoolName);
+      const classes = school?.classes || [];
+      setMasterClasses(classes);
+      setMasterDivisions([]);
+    }
+  };
+
+  const handleAddClassChange = (classLabel: string) => {
+    setAddClass(classLabel);
+    setAddDivision("");
+
+    if (classLabel) {
+      const classObj = masterClasses.find((c: any) => c.label === classLabel);
+      const divisions = classObj?.divisions || [];
+      setMasterDivisions(divisions);
+    }
+  };
+
+  const handleClassFilterChange = (classLabel: string) => {
+    setClassFilter(classLabel);
+    setDivisionFilter(""); // Reset division filter
+
+    // Get divisions for selected class
+    if (classLabel) {
+      const classObj = masterClasses.find((c: any) => c.label === classLabel);
+      const divisions = classObj?.divisions || [];
+      setMasterDivisions(divisions);
+    } else {
+      setMasterDivisions([]);
+    }
+  };
 
   const grouped = useMemo(() => {
     const filtered = students.filter((s) => {
@@ -325,6 +458,45 @@ function AdminStudents() {
     toast.success("Student updated", {
       description: `${updated.name}'s record was saved.`,
     });
+  };
+
+  const handleAddStudent = async (student: StudentEntry) => {
+    try {
+      const selectedSchool = masterSchools.find((s: any) => s.name === addSchool);
+      const selectedClass = masterClasses.find((c: any) => c.label === addClass);
+      
+      const payload = {
+        full_name: student.name,
+        teacher_name: student.teacherName,
+        admission_no: student.admissionNo,
+        school: selectedSchool?.id || addSchool,
+        guardian_phone: student.parentMobile,
+        parent_name: student.parentName,
+        class_name: selectedClass?.class_name || addClass,
+        division: addDivision,
+        date_of_birth: student.dob,
+        blood_group: student.bloodGroup,
+        gender: student.gender,
+        address: student.address,
+        emergency_contact: student.emergencyContact,
+        photo: student.photo,
+        status: "PENDING_ADMIN",
+      };
+
+      const apiResponse = await createStudent(payload);
+      const newStudent = mapStudent(apiResponse);
+      setStudents([...students, newStudent]);
+      toast.success(`Added ${student.name}`, {
+        description: "Student added and pending admin review.",
+      });
+      setShowAddForm(false);
+      setAddSchool("");
+      setAddClass("");
+      setAddDivision("");
+    } catch (error: any) {
+      console.error("Error adding student:", error);
+      toast.error("Failed to add student. Please try again.");
+    }
   };
 
   const closeDialog = () => {
@@ -500,6 +672,82 @@ function AdminStudents() {
           </div>
         )}
 
+        {/* Add Student Section */}
+        {!showAddForm && (
+          <div className="glass-card rounded-2xl p-4 sm:p-6 glow-green-sm border-primary/20">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+              <div className="flex-1 grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-sm">School</Label>
+                  <select
+                    value={addSchool}
+                    onChange={(e) => handleAddSchoolChange(e.target.value)}
+                    className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground w-full"
+                  >
+                    <option value="">Select School</option>
+                    {masterSchools.map((s: any) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Class</Label>
+                  <select
+                    value={addClass}
+                    onChange={(e) => handleAddClassChange(e.target.value)}
+                    disabled={!addSchool}
+                    className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground w-full disabled:opacity-50"
+                  >
+                    <option value="">Select Class</option>
+                    {masterClasses.map((c: any) => (
+                      <option key={c.class_name} value={c.label}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Division</Label>
+                  <select
+                    value={addDivision}
+                    onChange={(e) => setAddDivision(e.target.value)}
+                    disabled={!addClass}
+                    className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground w-full disabled:opacity-50"
+                  >
+                    <option value="">Select Division</option>
+                    {masterDivisions.map((d: string) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <Button
+                variant="hero"
+                onClick={() => setShowAddForm(true)}
+                disabled={!addSchool || !addClass || !addDivision}
+                className="w-full sm:w-auto"
+              >
+                <UserPlus size={16} /> Add Student
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Add/Edit Student Form */}
+        {showAddForm && (
+          <AdminAddStudentForm
+            school={addSchool}
+            class={addClass}
+            division={addDivision}
+            onSave={handleAddStudent}
+            onCancel={() => setShowAddForm(false)}
+          />
+        )}
+
         {/* Filters */}
         <div className="glass-card rounded-xl p-4 flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -516,25 +764,26 @@ function AdminStudents() {
           </div>
           <select
             value={schoolFilter}
-            onChange={(e) => setSchoolFilter(e.target.value)}
+            onChange={(e) => handleSchoolFilterChange(e.target.value)}
             className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground"
           >
             <option value="">All Schools ({students.length})</option>
-            {schools.map((s) => (
-              <option key={s} value={s}>
-                {s} ({students.filter((st) => st.school === s).length})
+            {masterSchools.map((s: any) => (
+              <option key={s.id} value={s.name}>
+                {s.name} ({students.filter((st) => st.school === s.name).length})
               </option>
             ))}
           </select>
           <select
             value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
+            onChange={(e) => handleClassFilterChange(e.target.value)}
             className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground"
+            disabled={!schoolFilter}
           >
             <option value="">All Classes ({students.length})</option>
-            {classes.map((c) => (
-              <option key={c} value={c}>
-                {c} ({students.filter((st) => st.class === c).length})
+            {masterClasses.map((c: any) => (
+              <option key={c.class_name} value={c.label}>
+                {c.label} ({students.filter((st) => st.class === c.class_name).length})
               </option>
             ))}
           </select>
@@ -542,9 +791,10 @@ function AdminStudents() {
             value={divisionFilter}
             onChange={(e) => setDivisionFilter(e.target.value)}
             className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground"
+            disabled={!classFilter}
           >
             <option value="">All Divisions ({students.length})</option>
-            {divisions.map((d) => (
+            {masterDivisions.map((d: string) => (
               <option key={d} value={d}>
                 {d} ({students.filter((st) => st.division === d).length})
               </option>
@@ -708,23 +958,26 @@ function AdminStudents() {
                   <Button variant="outline" onClick={closeDialog}>
                     Close
                   </Button>
-                  {selected.status === "PENDING_ADMIN" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        className="text-destructive border-destructive/30"
-                        onClick={() => handleReject(selected)}
-                      >
-                        <XCircle size={14} /> Reject
-                      </Button>
-                      <Button
-                        variant="hero"
-                        onClick={() => handleApprove(selected)}
-                      >
-                        <ThumbsUp size={14} /> Approve
-                      </Button>
-                    </>
-                  )}
+                    {selected.status === "PENDING_ADMIN" && (
+                      <>
+                        <Button variant="outline" onClick={() => handleRevert(selected)}>
+                          <ChevronLeft size={14} /> Revert
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="text-destructive border-destructive/30"
+                          onClick={() => handleReject(selected)}
+                        >
+                          <XCircle size={14} /> Reject
+                        </Button>
+                        <Button variant="hero" onClick={() => handleApprove(selected)}>
+                          <ThumbsUp size={14} /> Approve
+                        </Button>
+                        <Button variant="secondary" onClick={() => handleIdCardIssued(selected)}>
+                          <DownloadIcon size={14} /> ID Card Issued
+                        </Button>
+                      </>
+                    )}
                   {selected.status === "APPROVED" && (
                     <Button variant="hero" onClick={() => setEditing(true)}>
                       <Edit size={14} /> Edit Details

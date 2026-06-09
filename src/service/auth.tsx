@@ -74,3 +74,27 @@ export const handleLoginOtpVerify = async (
     throw error?.response?.data || error;
   }
 };
+
+export const handleLoginWithPassword = async (
+  phone: string,
+  password: string,
+  role?: string,
+) => {
+  try {
+    const payload: any = { phone, password };
+    if (role) payload.role = role;
+
+    const response = await axios.post(
+      `${import.meta.env.VITE_API_BASE_URL}/auth/login/`,
+      payload,
+      {
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+
+    return response.data;
+  } catch (error: any) {
+    console.error('Login with password error:', error);
+    throw error?.response?.data || error;
+  }
+};

@@ -3,8 +3,19 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  Search, Eye, Edit, ThumbsUp, UserPlus, Camera, Upload, X, GraduationCap, School, ArrowRight,
+  Search,
+  Eye,
+  Edit,
+  ThumbsUp,
+  UserPlus,
+  Camera,
+  Upload,
+  X,
+  GraduationCap,
+  School,
+  ArrowRight,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -18,7 +29,12 @@ import {
 } from "@/lib/student-status";
 import { isValidIndianMobile } from "@/lib/utils";
 import { patchStudentStatus } from "@/service/students";
-import { handleGetTeacherDetails, createStudent, getTeacherStudents, updateStudent } from "@/service/teacher";
+import {
+  handleGetTeacherDetails,
+  createStudent,
+  getTeacherStudents,
+  updateStudent,
+} from "@/service/teacher";
 
 export const Route = createFileRoute("/teacher")({
   component: TeacherPortal,
@@ -37,6 +53,7 @@ type TeacherProfile = {
 type StudentEntry = {
   id: number;
   name: string;
+  teacherName: string;
   admissionNo: string;
   class: string;
   division: string;
@@ -60,6 +77,7 @@ type ConfirmState = {
 function TeacherPortal() {
   const [profile, setProfile] = useState<TeacherProfile | null>(null);
   const [loaded, setLoaded] = useState(false);
+  
 
   useEffect(() => {
     let isMounted = true;
@@ -76,7 +94,7 @@ function TeacherPortal() {
       } finally {
         if (isMounted) setLoaded(true);
       }
-    }; 
+    };
 
     const fetchTeacherProfile = async () => {
       try {
@@ -85,15 +103,23 @@ function TeacherPortal() {
         const teacher = data.teacher || data.profile || data;
         const profileData =
           data.teacher_profile ||
-          (Array.isArray(data.teacher_assignments) && data.teacher_assignments[0]) ||
+          (Array.isArray(data.teacher_assignments) &&
+            data.teacher_assignments[0]) ||
           teacher ||
           {};
 
         const normalizedProfile: TeacherProfile = {
           schoolId:
-            profileData.school || profileData.school_id || profileData.schoolId || "",
+            profileData.school ||
+            profileData.school_id ||
+            profileData.schoolId ||
+            "",
           schoolName:
-            profileData.school_name || profileData.schoolName || teacher.schoolName || teacher.school || "",
+            profileData.school_name ||
+            profileData.schoolName ||
+            teacher.schoolName ||
+            teacher.school ||
+            "",
           teacherName:
             `${teacher.first_name || ""} ${teacher.last_name || ""}`.trim() ||
             teacher.username ||
@@ -101,16 +127,29 @@ function TeacherPortal() {
             teacher.teacherName ||
             "",
           classGrade:
-            profileData.class_name || profileData.className || profileData.class || teacher.class || teacher.classGrade || "",
-          division:
-            profileData.division || profileData.div || "",
+            profileData.class_name ||
+            profileData.className ||
+            profileData.class ||
+            teacher.class ||
+            teacher.classGrade ||
+            "",
+          division: profileData.division || profileData.div || "",
           mobile: teacher.phone || teacher.mobile || "",
-          email: teacher.email || teacher.emailAddress || teacher.username || "",
+          email:
+            teacher.email || teacher.emailAddress || teacher.username || "",
         };
 
-        if (isMounted && (normalizedProfile.schoolName || normalizedProfile.teacherName || normalizedProfile.classGrade)) {
+        if (
+          isMounted &&
+          (normalizedProfile.schoolName ||
+            normalizedProfile.teacherName ||
+            normalizedProfile.classGrade)
+        ) {
           setProfile(normalizedProfile);
-          localStorage.setItem("markone.teacherProfile", JSON.stringify(normalizedProfile));
+          localStorage.setItem(
+            "markone.teacherProfile",
+            JSON.stringify(normalizedProfile),
+          );
         }
       } catch (error) {
         console.error("Error fetching teacher details:", error);
@@ -140,8 +179,8 @@ function RegistrationRequired() {
         </div>
         <h1 className="text-2xl font-bold">Teacher Registration Required</h1>
         <p className="text-muted-foreground mt-2 text-sm">
-          Please complete your one-time teacher registration to access the dashboard
-          and start adding students of your class.
+          Please complete your one-time teacher registration to access the
+          dashboard and start adding students of your class.
         </p>
         <div className="mt-6 flex flex-col gap-3">
           <Button variant="hero" size="lg" asChild>
@@ -161,13 +200,19 @@ function RegistrationRequired() {
 function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
   const [students, setStudents] = useState<StudentEntry[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingStudent, setEditingStudent] = useState<StudentEntry | null>(null);
-  const [viewingStudent, setViewingStudent] = useState<StudentEntry | null>(null);
+  const [studentUpdate,setStudentUpdate] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<StudentEntry | null>(
+    null,
+  );
+  const [viewingStudent, setViewingStudent] = useState<StudentEntry | null>(
+    null,
+  );
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  
   const filtered = students.filter((s) => {
     const q = search.trim().toLowerCase();
     const matchesSearch =
@@ -180,13 +225,37 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
   });
 
   const stats = [
-    { label: "My Students", value: String(students.length), color: "text-primary" },
-    { label: "Pending Parent", value: String(students.filter(s => s.status === "PENDING_PARENT").length), color: "text-yellow-400" },
-    { label: "Pending Teacher", value: String(students.filter(s => s.status === "PENDING_TEACHER").length), color: "text-blue-400" },
-    { label: "Approved", value: String(students.filter(s => s.status === "APPROVED").length), color: "text-emerald-400" },
+    {
+      label: "My Students",
+      value: String(students.length),
+      color: "text-primary",
+    },
+    {
+      label: "Pending Parent",
+      value: String(
+        students.filter((s) => s.status === "PENDING_PARENT").length,
+      ),
+      color: "text-yellow-400",
+    },
+    {
+      label: "Pending Teacher",
+      value: String(
+        students.filter((s) => s.status === "PENDING_TEACHER").length,
+      ),
+      color: "text-blue-400",
+    },
+    {
+      label: "Approved",
+      value: String(students.filter((s) => s.status === "APPROVED").length),
+      color: "text-emerald-400",
+    },
   ];
 
-  const showConfirm = (title: string, description: string, onConfirm: () => Promise<void>) => {
+  const showConfirm = (
+    title: string,
+    description: string,
+    onConfirm: () => Promise<void>,
+  ) => {
     setConfirmState({ title, description, onConfirm });
     setConfirmOpen(true);
   };
@@ -204,14 +273,30 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
     }
   };
 
-  const persistStudent = async (student: StudentEntry, targetStatus: StudentWorkflowStatus) => {
-    const scoped = { ...student, class: profile.classGrade, division: profile.division, status: targetStatus };
+  const persistStudent = async (
+    student: StudentEntry,
+    targetStatus: StudentWorkflowStatus,
+  ) => {
+    const scoped = {
+      ...student,
+      class: profile.classGrade,
+      division: profile.division,
+      status: targetStatus,
+    };
     const payload = {
       full_name: scoped.name,
+      teacher_name: scoped.teacherName,
+      admission_no: scoped.admissionNo,
       school: profile.schoolId || profile.schoolName || "",
       guardian_phone: scoped.parentMobile,
+      guardian_name: scoped.parentName,
       class_name: scoped.class,
       division: scoped.division,
+      date_of_birth: scoped.dob,
+      blood_group: scoped.bloodGroup,
+      gender: scoped.gender,
+      address: scoped.address,
+      emergency_contact: scoped.emergencyContact,
       photo: scoped.photo,
       status: targetStatus,
     };
@@ -219,24 +304,32 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
     if (editingStudent) {
       const apiResponse = await updateStudent(editingStudent.id, payload);
       if (apiResponse?.id) scoped.id = apiResponse.id;
-      if (apiResponse?.status) scoped.status = normalizeStudentStatus(apiResponse.status);
-      setStudents(students.map(s => s.id === scoped.id ? scoped : s));
+      if (apiResponse?.status)
+        scoped.status = normalizeStudentStatus(apiResponse.status);
+      setStudents(students.map((s) => (s.id === scoped.id ? scoped : s)));
       toast.success(`Updated ${scoped.name}`);
     } else {
       const apiResponse = await createStudent(payload);
       if (apiResponse?.id) scoped.id = apiResponse.id;
-      if (apiResponse?.status) scoped.status = normalizeStudentStatus(apiResponse.status);
+      if (apiResponse?.status)
+        scoped.status = normalizeStudentStatus(apiResponse.status);
       setStudents([...students, { ...scoped, id: scoped.id || Date.now() }]);
       toast.success(`Saved ${scoped.name}`, {
-        description: targetStatus === "PENDING_PARENT" ? "Sent to parent for verification." : "Saved as draft.",
+        description:
+          targetStatus === "PENDING_PARENT"
+            ? "Sent to parent for verification."
+            : "Saved as draft.",
       });
     }
-
+    setStudentUpdate(!studentUpdate);
     setShowAddForm(false);
     setEditingStudent(null);
   };
 
-  const handleSaveStudent = (student: StudentEntry, targetStatus: StudentWorkflowStatus) => {
+  const handleSaveStudent = (
+    student: StudentEntry,
+    targetStatus: StudentWorkflowStatus,
+  ) => {
     const actionText =
       targetStatus === "DRAFT"
         ? "save this student as a draft"
@@ -249,20 +342,24 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
     showConfirm(
       "Confirm action",
       `Are you sure you want to ${actionText}?`,
-      () => persistStudent(student, targetStatus)
+      () => persistStudent(student, targetStatus),
     );
   };
 
   const handleSendToParent = (student: StudentEntry) => {
     showConfirm(
-      "Send to parent",
-      `Send ${student.name} to the parent for verification?`,
+      "Submit to admin",
+      `Submit ${student.name} to admin for review?`,
       async () => {
-        await patchStudentStatus(student.id, "PENDING_PARENT");
-        setStudents(students.map(s => s.id === student.id ? { ...s, status: "PENDING_PARENT" } : s));
-        toast.success(`Sent ${student.name} to parent`);
+        await patchStudentStatus(student.id, "PENDING_ADMIN");
+        setStudents(
+          students.map((s) =>
+            s.id === student.id ? { ...s, status: "PENDING_ADMIN" } : s,
+          ),
+        );
+        toast.success(`Submitted ${student.name} to admin for review`);
         setViewingStudent(null);
-      }
+      },
     );
   };
 
@@ -289,7 +386,8 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
           bloodGroup: s.blood_group || s.bloodGroup || "",
           gender: s.gender || "",
           parentName: s.parent_name || s.guardian_name || s.parentName || "",
-          parentMobile: s.guardian_phone || s.parent_mobile || s.parentMobile || "",
+          parentMobile:
+            s.guardian_phone || s.parent_mobile || s.parentMobile || "",
           address: s.address || "",
           emergencyContact: s.emergency_contact || s.emergencyContact || "",
           photo: s.photo || null,
@@ -304,8 +402,10 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
     };
 
     loadStudents();
-    return () => { mounted = false; };
-  }, []);
+    return () => {
+      mounted = false;
+    };
+  }, [studentUpdate]);
 
   const handleApprove = (id: number) => {
     const student = students.find((s) => s.id === id);
@@ -316,10 +416,16 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
       `Approve ${student.name} and send to admin for final review?`,
       async () => {
         await patchStudentStatus(id, "PENDING_ADMIN");
-        setStudents(students.map(s => s.id === id ? { ...s, status: "PENDING_ADMIN" as const } : s));
-        toast.success(`Approved ${student.name}`, { description: "Sent to admin for final approval." });
+        setStudents(
+          students.map((s) =>
+            s.id === id ? { ...s, status: "PENDING_ADMIN" as const } : s,
+          ),
+        );
+        toast.success(`Approved ${student.name}`, {
+          description: "Sent to admin for final approval.",
+        });
         setViewingStudent(null);
-      }
+      },
     );
   };
 
@@ -337,10 +443,13 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
                 <GraduationCap size={22} className="text-primary" />
               </div>
               <div>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Welcome back</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Welcome back
+                </p>
                 <h2 className="text-lg font-semibold">{profile.teacherName}</h2>
                 <p className="text-xs text-muted-foreground inline-flex items-center gap-1.5 mt-0.5">
-                  <School size={12} className="text-primary" /> {profile.schoolName}
+                  <School size={12} className="text-primary" />{" "}
+                  {profile.schoolName}
                 </p>
               </div>
             </div>
@@ -360,7 +469,9 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
           {stats.map((stat) => (
             <div key={stat.label} className="glass-card rounded-xl p-5">
               <p className="text-sm text-muted-foreground">{stat.label}</p>
-              <p className={`text-3xl font-bold mt-1 ${stat.color}`}>{stat.value}</p>
+              <p className={`text-3xl font-bold mt-1 ${stat.color}`}>
+                {stat.value}
+              </p>
             </div>
           ))}
         </div>
@@ -370,7 +481,14 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
           <h2 className="text-base sm:text-lg font-semibold">
             Students of Class {profile.classGrade}-{profile.division}
           </h2>
-          <Button variant="hero" className="w-full sm:w-auto" onClick={() => { setEditingStudent(null); setShowAddForm(true); }}>
+          <Button
+            variant="hero"
+            className="w-full sm:w-auto"
+            onClick={() => {
+              setEditingStudent(null);
+              setShowAddForm(true);
+            }}
+          >
             <UserPlus size={16} /> Add Student
           </Button>
         </div>
@@ -381,7 +499,10 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
             student={editingStudent}
             profile={profile}
             onSave={handleSaveStudent}
-            onCancel={() => { setShowAddForm(false); setEditingStudent(null); }}
+            onCancel={() => {
+              setShowAddForm(false);
+              setEditingStudent(null);
+            }}
           />
         )}
 
@@ -391,7 +512,10 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
             student={viewingStudent}
             canEdit={canEdit(viewingStudent)}
             onClose={() => setViewingStudent(null)}
-            onEdit={() => { setEditingStudent(viewingStudent); setViewingStudent(null); }}
+            onEdit={() => {
+              setEditingStudent(viewingStudent);
+              setViewingStudent(null);
+            }}
             onSendToParent={() => handleSendToParent(viewingStudent)}
             onApprove={() => handleApprove(viewingStudent.id)}
           />
@@ -404,14 +528,19 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
             if (!open) setConfirmState(null);
           }}
           title={confirmState?.title || "Confirm action"}
-          description={confirmState?.description || "Are you sure you want to proceed?"}
+          description={
+            confirmState?.description || "Are you sure you want to proceed?"
+          }
           onConfirm={handleConfirmAction}
         />
 
         {/* Filters */}
         <div className="glass-card rounded-xl p-4 flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
             <Input
               placeholder="Search by name, admission no, parent..."
               value={search}
@@ -425,10 +554,9 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
             className="h-9 rounded-md border border-border bg-surface px-3 text-sm text-foreground"
           >
             <option value="">All Status</option>
-            <option value="DRAFT">Draft</option>
-            <option value="PENDING_PARENT">Pending Parent</option>
-            <option value="PENDING_TEACHER">Pending Teacher</option>
-            <option value="PENDING_ADMIN">Pending Admin</option>
+              <option value="DRAFT">Draft</option>
+              <option value="PENDING_TEACHER">Pending Teacher</option>
+              <option value="PENDING_ADMIN">Pending Admin</option>
             <option value="APPROVED">Approved</option>
           </select>
         </div>
@@ -438,60 +566,87 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
           <div className="space-y-1 p-2">
             {filtered.length === 0 ? (
               <div className="p-10 text-center text-sm text-muted-foreground">
-                No students yet. Click <span className="text-primary font-medium">Add Student</span> to begin.
+                No students yet. Click{" "}
+                <span className="text-primary font-medium">Add Student</span> to
+                begin.
               </div>
-            ) : filtered.map((student) => (
-              <div key={student.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface p-3 sm:p-4 hover:bg-surface-hover transition-colors">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary overflow-hidden">
-                    {student.photo ? (
-                      <img src={student.photo} alt={student.name} className="h-full w-full object-cover" />
-                    ) : (
-                      student.name[0]
-                    )}
+            ) : (
+              filtered.map((student) => (
+                <div
+                  key={student.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface p-3 sm:p-4 hover:bg-surface-hover transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="h-10 w-10 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary overflow-hidden">
+                      {student.photo ? (
+                        <img
+                          src={student.photo}
+                          alt={student.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        student.name[0]
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">
+                        {student.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {student.admissionNo} • {student.parentMobile}
+                      </p>
+                      <span
+                        className={`mt-1 inline-block md:hidden rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusBadgeClass(student.status)}`}
+                      >
+                        {getStatusLabel(student.status)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm truncate">{student.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {student.admissionNo} • {student.parentMobile}
-                    </p>
-                    <span className={`mt-1 inline-block md:hidden rounded-full px-2 py-0.5 text-[10px] font-medium ${getStatusBadgeClass(student.status)}`}>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-medium hidden md:inline ${getStatusBadgeClass(student.status)}`}
+                    >
                       {getStatusLabel(student.status)}
                     </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`rounded-full px-3 py-1 text-xs font-medium hidden md:inline ${getStatusBadgeClass(student.status)}`}>
-                    {getStatusLabel(student.status)}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setViewingStudent(student)}>
-                      <Eye size={14} />
-                    </Button>
-                    {canEdit(student) && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingStudent(student)}>
-                        <Edit size={14} />
-                      </Button>
-                    )}
-                    {student.status === "PENDING_TEACHER" && (
+                    <div className="flex items-center gap-1">
                       <Button
-                        variant="hero"
-                        size="sm"
-                        className="h-8 text-xs"
-                        onClick={() => handleApprove(student.id)}
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setViewingStudent(student)}
                       >
-                        <ThumbsUp size={14} /> Approve
+                        <Eye size={14} />
                       </Button>
-                    )}
-                    {student.status === "PENDING_PARENT" && (
-                      <span className="text-xs text-yellow-400 hidden sm:inline">
-                        Verification from parent is pending
-                      </span>
-                    )}
+                      {canEdit(student) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setEditingStudent(student)}
+                        >
+                          <Edit size={14} />
+                        </Button>
+                      )}
+                      {student.status === "PENDING_TEACHER" && (
+                        <Button
+                          variant="hero"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => handleApprove(student.id)}
+                        >
+                          <ThumbsUp size={14} /> Approve
+                        </Button>
+                      )}
+                      {student.status === "PENDING_PARENT" && (
+                        <span className="text-xs text-yellow-400 hidden sm:inline">
+                          Verification from parent is pending
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -499,34 +654,64 @@ function TeacherDashboard({ profile }: { profile: TeacherProfile }) {
   );
 }
 
-function StudentForm({ student, profile, onSave, onCancel }: {
+function StudentForm({
+  student,
+  profile,
+  onSave,
+  onCancel,
+}: {
   student: StudentEntry | null;
   profile: TeacherProfile;
   onSave: (s: StudentEntry, targetStatus: StudentWorkflowStatus) => void;
   onCancel: () => void;
 }) {
-  const [form, setForm] = useState<StudentEntry>(student || {
-    id: 0, name: "", admissionNo: "",
-    class: profile.classGrade, division: profile.division,
-    dob: "", bloodGroup: "",
-    gender: "", parentName: "", parentMobile: "", address: "", emergencyContact: "", photo: null, status: "DRAFT",
-  });
-  const [errors, setErrors] = useState<{ parentMobile?: string; emergencyContact?: string }>({});
+  const [form, setForm] = useState<StudentEntry>(
+    student || {
+      id: 0,
+      name: "",
+      teacherName: profile.teacherName || "",
+      admissionNo: "",
+      class: profile.classGrade,
+      division: profile.division,
+      dob: "",
+      bloodGroup: "",
+      gender: "",
+      parentName: "",
+      parentMobile: "",
+      address: "",
+      emergencyContact: "",
+      photo: null,
+      status: "DRAFT",
+    },
+  );
+  const [errors, setErrors] = useState<{
+    parentMobile?: string;
+    emergencyContact?: string;
+  }>({});
 
   const isNew = !student;
   const isDraftEdit = !!student && student.status === "DRAFT";
   const isPendingParent = !!student && student.status === "PENDING_PARENT";
-  const isPendingTeacherEdit = !!student && student.status === "PENDING_TEACHER";
+  const isPendingTeacherEdit =
+    !!student && student.status === "PENDING_TEACHER";
 
   const validateForm = () => {
     const nextErrors: typeof errors = {};
+
+    if (!form.teacherName.trim()) {
+      toast.error("Teacher name is required.");
+      return false;
+    }
 
     if (!form.parentMobile.trim() || !isValidIndianMobile(form.parentMobile)) {
       nextErrors.parentMobile =
         "Mobile number should follow Indian standard: 10 digits starting with 6-9.";
     }
 
-    if (form.emergencyContact.trim() && !isValidIndianMobile(form.emergencyContact)) {
+    if (
+      form.emergencyContact.trim() &&
+      !isValidIndianMobile(form.emergencyContact)
+    ) {
       nextErrors.emergencyContact =
         "Emergency contact should be a valid Indian mobile number.";
     }
@@ -547,12 +732,20 @@ function StudentForm({ student, profile, onSave, onCancel }: {
     <div className="glass-card rounded-2xl p-4 sm:p-6 glow-green-sm space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">{student ? "Edit Student" : "Add New Student"}</h2>
+          <h2 className="text-lg font-semibold">
+            {student ? "Edit Student" : "Add New Student"}
+          </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            For Class {profile.classGrade} - Division {profile.division} • {profile.schoolName}
+            For Class {profile.classGrade} - Division {profile.division} •{" "}
+            {profile.schoolName}
           </p>
         </div>
-        <button onClick={onCancel} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
+        <button
+          onClick={onCancel}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <X size={20} />
+        </button>
       </div>
 
       {/* Photo Upload */}
@@ -560,21 +753,31 @@ function StudentForm({ student, profile, onSave, onCancel }: {
         <div className="relative">
           <div className="h-28 w-28 rounded-full border-2 border-dashed border-border bg-surface flex items-center justify-center overflow-hidden">
             {form.photo ? (
-              <img src={form.photo} alt="Student" className="h-full w-full object-cover" />
+              <img
+                src={form.photo}
+                alt="Student"
+                className="h-full w-full object-cover"
+              />
             ) : (
               <Camera size={32} className="text-muted-foreground" />
             )}
           </div>
           <label className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary flex items-center justify-center cursor-pointer hover:bg-primary/80 transition-colors">
             <Upload size={14} className="text-primary-foreground" />
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onload = (ev) => setForm({ ...form, photo: ev.target?.result as string });
-                reader.readAsDataURL(file);
-              }
-            }} />
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (ev) =>
+                    setForm({ ...form, photo: ev.target?.result as string });
+                  reader.readAsDataURL(file);
+                }
+              }}
+            />
           </label>
         </div>
       </div>
@@ -582,85 +785,176 @@ function StudentForm({ student, profile, onSave, onCancel }: {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Student Full Name *</Label>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" className="bg-surface border-border" />
+          <Input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="Full name"
+            className="bg-surface border-border"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Teacher Name *</Label>
+          <Input
+            value={form.teacherName}
+            onChange={(e) => setForm({ ...form, teacherName: e.target.value })}
+            placeholder="Teacher name"
+            className="bg-surface border-border"
+          />
         </div>
         <div className="space-y-2">
           <Label>Admission Number *</Label>
-          <Input value={form.admissionNo} onChange={(e) => setForm({ ...form, admissionNo: e.target.value })} placeholder="ADM-XXX" className="bg-surface border-border" />
+          <Input
+            value={form.admissionNo}
+            onChange={(e) => setForm({ ...form, admissionNo: e.target.value })}
+            placeholder="ADM-XXX"
+            className="bg-surface border-border"
+          />
         </div>
         <div className="space-y-2">
           <Label>Class</Label>
-          <Input value={`Class ${profile.classGrade}`} disabled className="bg-surface border-border opacity-70" />
+          <Input
+            value={`Class ${profile.classGrade}`}
+            disabled
+            className="bg-surface border-border opacity-70"
+          />
         </div>
         <div className="space-y-2">
           <Label>Division</Label>
-          <Input value={`Division ${profile.division}`} disabled className="bg-surface border-border opacity-70" />
+          <Input
+            value={`Division ${profile.division}`}
+            disabled
+            className="bg-surface border-border opacity-70"
+          />
         </div>
         <div className="space-y-2">
           <Label>Date of Birth *</Label>
-          <Input type="date" value={form.dob} onChange={(e) => setForm({ ...form, dob: e.target.value })} className="bg-surface border-border" />
+          <Input
+            type="date"
+            value={form.dob}
+            onChange={(e) => setForm({ ...form, dob: e.target.value })}
+            className="bg-surface border-border"
+          />
         </div>
         <div className="space-y-2">
           <Label>Blood Group</Label>
-          <select value={form.bloodGroup} onChange={(e) => setForm({ ...form, bloodGroup: e.target.value })} className="flex h-9 w-full rounded-md border border-border bg-surface px-3 py-1 text-sm text-foreground">
+          <select
+            value={form.bloodGroup}
+            onChange={(e) => setForm({ ...form, bloodGroup: e.target.value })}
+            className="flex h-9 w-full rounded-md border border-border bg-surface px-3 py-1 text-sm text-foreground"
+          >
             <option value="">Select</option>
-            {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(bg => <option key={bg} value={bg}>{bg}</option>)}
+            {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
+              <option key={bg} value={bg}>
+                {bg}
+              </option>
+            ))}
           </select>
         </div>
         <div className="space-y-2">
           <Label>Gender *</Label>
-          <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} className="flex h-9 w-full rounded-md border border-border bg-surface px-3 py-1 text-sm text-foreground">
+          <select
+            value={form.gender}
+            onChange={(e) => setForm({ ...form, gender: e.target.value })}
+            className="flex h-9 w-full rounded-md border border-border bg-surface px-3 py-1 text-sm text-foreground"
+          >
             <option value="">Select</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-            <option value="Other">Other</option>
+            <option value="MALE">Male</option>
+            <option value="FEMALE">Female</option>
+            <option value="OTHER">Other</option>
           </select>
         </div>
         <div className="space-y-2">
           <Label>Parent/Guardian Name *</Label>
-          <Input value={form.parentName} onChange={(e) => setForm({ ...form, parentName: e.target.value })} placeholder="Parent name" className="bg-surface border-border" />
+          <Input
+            value={form.parentName}
+            onChange={(e) => setForm({ ...form, parentName: e.target.value })}
+            placeholder="Parent name"
+            className="bg-surface border-border"
+          />
         </div>
         <div className="space-y-2">
           <Label>Parent Mobile *</Label>
-          <Input type="tel" value={form.parentMobile} onChange={(e) => setForm({ ...form, parentMobile: e.target.value })} placeholder="+91 XXXXX XXXXX" className="bg-surface border-border" />
-          {errors.parentMobile && <p className="text-xs text-destructive">{errors.parentMobile}</p>}
+          <Input
+            type="tel"
+            value={form.parentMobile}
+            onChange={(e) => setForm({ ...form, parentMobile: e.target.value })}
+            placeholder="+91 XXXXX XXXXX"
+            className="bg-surface border-border"
+          />
+          {errors.parentMobile && (
+            <p className="text-xs text-destructive">{errors.parentMobile}</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label>Address</Label>
-          <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Home address" className="bg-surface border-border" />
+          <Textarea
+            value={form.address}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+            placeholder="Home address"
+            rows={4}
+            className="bg-surface border-border resize-none"
+          />
         </div>
         <div className="space-y-2">
           <Label>Emergency Contact</Label>
-          <Input type="tel" value={form.emergencyContact} onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })} placeholder="+91 XXXXX XXXXX" className="bg-surface border-border" />
-          {errors.emergencyContact && <p className="text-xs text-destructive">{errors.emergencyContact}</p>}
+          <Input
+            type="tel"
+            value={form.emergencyContact}
+            onChange={(e) =>
+              setForm({ ...form, emergencyContact: e.target.value })
+            }
+            placeholder="+91 XXXXX XXXXX"
+            className="bg-surface border-border"
+          />
+          {errors.emergencyContact && (
+            <p className="text-xs text-destructive">
+              {errors.emergencyContact}
+            </p>
+          )}
         </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 justify-end">
-        <Button variant="outline" onClick={onCancel}>Cancel</Button>
-        {isPendingParent && (
-          <p className="text-sm text-yellow-400 self-center sm:mr-auto">
-            Verification from parent is pending.
-          </p>
-        )}
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        
         {isNew && (
           <>
-            <Button variant="heroOutline" onClick={() => handleSave("DRAFT")}>Save as Draft</Button>
-            <Button variant="hero" onClick={() => handleSave("PENDING_PARENT")}>Save & Send to Parent</Button>
+            <Button variant="heroOutline" onClick={() => handleSave("DRAFT")}>
+              Save as Draft
+            </Button>
+            <Button variant="hero" onClick={() => handleSave("PENDING_ADMIN")}>
+              Submit
+            </Button>
           </>
         )}
         {isDraftEdit && (
-          <Button variant="hero" onClick={() => handleSave("PENDING_PARENT")}>Send to Parent</Button>
+          <Button variant="hero" onClick={() => handleSave("PENDING_PARENT")}>
+            Send to Parent
+          </Button>
         )}
         {isPendingTeacherEdit && (
-          <Button variant="heroOutline" onClick={() => handleSave("PENDING_TEACHER")}>Save Changes</Button>
+          <Button
+            variant="heroOutline"
+            onClick={() => handleSave("PENDING_TEACHER")}
+          >
+            Save Changes
+          </Button>
         )}
       </div>
     </div>
   );
 }
 
-function StudentDetailView({ student, canEdit, onClose, onEdit, onSendToParent, onApprove }: {
+function StudentDetailView({
+  student,
+  canEdit,
+  onClose,
+  onEdit,
+  onSendToParent,
+  onApprove,
+}: {
   student: StudentEntry;
   canEdit: boolean;
   onClose: () => void;
@@ -674,27 +968,46 @@ function StudentDetailView({ student, canEdit, onClose, onEdit, onSendToParent, 
         <h2 className="text-lg font-semibold">{student.name}</h2>
         <div className="flex items-center gap-2">
           {canEdit && (
-            <Button variant="heroOutline" size="sm" onClick={onEdit}><Edit size={14} /> Edit</Button>
+            <Button variant="heroOutline" size="sm" onClick={onEdit}>
+              <Edit size={14} /> Edit
+            </Button>
           )}
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={20} /></button>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X size={20} />
+          </button>
         </div>
       </div>
 
       <div className="flex items-center gap-4">
         <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary overflow-hidden">
           {student.photo ? (
-            <img src={student.photo} alt={student.name} className="h-full w-full object-cover" />
-          ) : student.name[0]}
+            <img
+              src={student.photo}
+              alt={student.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            student.name[0]
+          )}
         </div>
         <div>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClass(student.status)}`}>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusBadgeClass(student.status)}`}
+          >
             {getStatusLabel(student.status)}
           </span>
           {student.status === "PENDING_PARENT" && (
-            <p className="text-xs text-yellow-400 mt-2">Verification from parent is pending.</p>
+            <p className="text-xs text-yellow-400 mt-2">
+              Verification from parent is pending.
+            </p>
           )}
           {student.status === "PENDING_ADMIN" && (
-            <p className="text-xs text-orange-400 mt-2">Waiting for admin approval.</p>
+            <p className="text-xs text-orange-400 mt-2">
+              Waiting for admin approval.
+            </p>
           )}
         </div>
       </div>
@@ -720,7 +1033,9 @@ function StudentDetailView({ student, canEdit, onClose, onEdit, onSendToParent, 
 
       <div className="flex flex-wrap gap-3 justify-end">
         {student.status === "DRAFT" && (
-          <Button variant="hero" size="sm" onClick={onSendToParent}>Send to Parent</Button>
+          <Button variant="hero" size="sm" onClick={onSendToParent}>
+            Submit
+          </Button>
         )}
         {student.status === "PENDING_TEACHER" && (
           <Button variant="hero" size="sm" onClick={onApprove}>

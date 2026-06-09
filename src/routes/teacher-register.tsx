@@ -24,9 +24,10 @@ import {
   BookOpen,
   ShieldCheck,
   Sparkles,
+  Lock,
 } from "lucide-react";
 import teacherIllustration from "@/assets/teacher-students.jpg";
-import { teacherRegistration, handleGetSchoolNames, handleVerifyOTP } from "@/service/teacher";
+import { teacherRegistration, handleGetSchoolNames } from "@/service/teacher";
 
 export const Route = createFileRoute("/teacher-register")({
   component: TeacherRegister,
@@ -58,7 +59,7 @@ type TeacherProfile = {
 
 function TeacherRegister() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<"form" | "otp" | "done">("form");
+  const [step, setStep] = useState<"form" | "done">("form");
   const [profile, setProfile] = useState<TeacherProfile>({
     schoolId: "",
     schoolName: "",
@@ -68,12 +69,10 @@ function TeacherRegister() {
     mobile: "",
     email: "",
   });
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [schoolList, setSchoolList] = useState<Array<{ id: string; name: string }>>([]);
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [resendTimer, setResendTimer] = useState(0);
-
-  const startResendCountdown = () => setResendTimer(300);
 
   const getRegistrationPayload = () => {
     const [first_name = "", last_name = ""] = profile.teacherName
@@ -92,42 +91,7 @@ function TeacherRegister() {
     };
   };
 
-  const handleResendOtp = async () => {
-    if (resendTimer > 0) return;
 
-    try {
-      const res = await teacherRegistration(getRegistrationPayload());
-      const success = res === true || res?.status === true || res?.success === true;
-
-      if (success) {
-        toast.success(`OTP resent to ${profile.mobile}`, {
-          description: "Please check your phone for the new code.",
-        });
-        startResendCountdown();
-      } else {
-        toast.error(
-          res?.error || res?.message || "Unable to resend OTP. Please try again.",
-        );
-      }
-    } catch (err: any) {
-      const msg =
-        err?.error ||
-        err?.message ||
-        (err && JSON.stringify(err)) ||
-        "Unable to resend OTP. Please try again.";
-      toast.error(msg);
-    }
-  };
-
-  useEffect(() => {
-    if (resendTimer <= 0) return;
-
-    const interval = window.setInterval(() => {
-      setResendTimer((prev) => Math.max(prev - 1, 0));
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, [resendTimer]);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -140,6 +104,8 @@ function TeacherRegister() {
       e.mobile = "Enter a valid Indian mobile number starting with 6-9.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email))
       e.email = "Enter a valid email";
+    if (!password || password.length < 6) e.password = "Password must be at least 6 characters";
+    if (password !== confirmPassword) e.confirmPassword = "Passwords do not match";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -196,76 +162,33 @@ function TeacherRegister() {
       .split(/\s+/, 2);
 
     const payload = getRegistrationPayload();
+    // include password if provided
+    if (password) (payload as any).password = password;
 
     try {
       const res = await teacherRegistration(payload);
-      const success = res === true || res?.status === true || res?.success === true;
+      const success = res === true || res?.status === true || res?.success === true || !!res?.data;
 
       if (success) {
-        toast.success(`OTP sent to ${profile.mobile}`, {
-          description: "Use any 6 digits to continue (demo mode).",
+        toast.success(`Registration successful — redirecting to dashboard`, {
+          description: "You can now sign in with your mobile and password.",
         });
-        setStep("otp");
-        startResendCountdown();
+        setStep("done");
+        setTimeout(() => navigate({ to: "/teacher" }), 900);
       } else {
-        toast.error("Unable to start registration. Please try again.");
+        toast.error("Unable to complete registration. Please try again.");
       }
     } catch (err: any) {
       const msg =
         err?.error ||
         err?.message ||
         (err && JSON.stringify(err)) ||
-        "Unable to start registration. Please try again.";
+        "Unable to complete registration. Please try again.";
       toast.error(msg);
     }
   };
 
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length > 1) return;
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-    if (value && index < 5)
-      document.getElementById(`reg-otp-${index + 1}`)?.focus();
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0)
-      document.getElementById(`reg-otp-${index - 1}`)?.focus();
-  };
-
-  const handleVerify = async() => {
-    if (otp.join("").length < 6) {
-      toast.error("Please enter the full 6-digit OTP");
-      return;
-    }
-
-    try {
-      const response = await handleVerifyOTP(profile.mobile, otp.join(""));
-      console.log(response, "rrrrrrrrrrrrrrr");
-
-      const success = response?.status === true;
-      if (!success) {
-        toast.error(
-          response?.error || response?.message || "OTP verification failed. Please try again.",
-        );
-        return;
-      }
-
-      toast.success(`Welcome, ${profile.teacherName}!`, {
-        description: "OTP verified — redirecting to your dashboard…",
-      });
-      setStep("done");
-      setTimeout(() => navigate({ to: "/teacher" }), 1200);
-    } catch (err: any) {
-      const msg =
-        err?.error ||
-        err?.message ||
-        (err && JSON.stringify(err)) ||
-        "Unable to verify OTP. Please try again.";
-      toast.error(msg);
-    }
-  };
+  
 
   return (
     <div className="min-h-screen bg-gradient-hero">
@@ -317,7 +240,7 @@ function TeacherRegister() {
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <Perk icon={ShieldCheck} title="Secure" subtitle="OTP verified" />
+            <Perk icon={ShieldCheck} title="Secure" subtitle="Password protected" />
             <Perk icon={BookOpen} title="Simple" subtitle="3-step setup" />
             <Perk icon={School} title="Trusted" subtitle="500+ schools" />
           </div>
@@ -355,12 +278,10 @@ function TeacherRegister() {
             />
             <div className="h-px w-10 bg-border" />
             <Stepper
-              label="Verify OTP"
-              active={step === "otp"}
-              done={step === "done"}
+              label="Complete"
+              active={step === "done"}
+              done={false}
             />
-            <div className="h-px w-10 bg-border" />
-            <Stepper label="Done" active={step === "done"} done={false} />
           </div>
 
           <div className="glass-card rounded-2xl p-5 sm:p-8 glow-green-sm">
@@ -496,10 +417,28 @@ function TeacherRegister() {
                   />
                 </Field>
 
+                <Field label="Password" icon={Lock} error={errors.password}>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Choose a strong password"
+                    className="bg-surface border-border h-11 pl-10"
+                  />
+                </Field>
+
+                <Field label="Confirm Password" icon={Lock} error={errors.confirmPassword}>
+                  <Input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat password"
+                    className="bg-surface border-border h-11 pl-10"
+                  />
+                </Field>
+
                 <div className="rounded-xl bg-primary/5 border border-primary/15 p-3 text-xs text-muted-foreground">
-                  <span className="text-primary font-medium">Note:</span> A
-                  6-digit OTP will be sent to your mobile to verify your
-                  identity.
+                  <span className="text-primary font-medium">Note:</span> Your account will be created — you can sign in using your mobile number and password.
                 </div>
 
                 <Button
@@ -508,7 +447,7 @@ function TeacherRegister() {
                   size="lg"
                   className="w-full"
                 >
-                  Continue to OTP <ArrowRight size={16} />
+                  Create Account <ArrowRight size={16} />
                 </Button>
 
                 <p className="text-center text-sm text-muted-foreground">
@@ -523,66 +462,7 @@ function TeacherRegister() {
               </form>
             )}
 
-            {step === "otp" && (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <h2 className="text-xl font-semibold">Verify your mobile</h2>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    We sent a 6-digit code to{" "}
-                    <span className="text-foreground font-medium">
-                      {profile.mobile}
-                    </span>
-                  </p>
-                </div>
-
-                <div className="flex justify-center gap-1.5 sm:gap-2">
-                  {otp.map((digit, i) => (
-                    <input
-                      key={i}
-                      id={`reg-otp-${i}`}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handleOtpChange(i, e.target.value)}
-                      onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                      className="w-9 h-11 sm:w-11 sm:h-12 text-center text-base sm:text-lg font-bold rounded-lg border border-border bg-surface text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring transition-colors"
-                    />
-                  ))}
-                </div>
-
-                <p className="text-xs text-muted-foreground text-center">
-                  Didn't receive?{" "}
-                  <button
-                    type="button"
-                    className={`text-primary ${resendTimer > 0 ? "opacity-50 cursor-not-allowed" : "hover:underline"}`}
-                    onClick={handleResendOtp}
-                    disabled={resendTimer > 0}
-                  >
-                    {resendTimer > 0
-                      ? `Resend OTP (${Math.floor(resendTimer / 60)}:${String(resendTimer % 60).padStart(2, "0")})`
-                      : "Resend OTP"}
-                  </button>
-                </p>
-
-                <Button
-                  variant="hero"
-                  size="lg"
-                  className="w-full"
-                  onClick={handleVerify}
-                >
-                  <CheckCircle2 size={16} /> Verify & Complete Registration
-                </Button>
-
-                <button
-                  type="button"
-                  onClick={() => setStep("form")}
-                  className="w-full text-sm text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-1"
-                >
-                  <ArrowLeft size={14} /> Edit details
-                </button>
-              </div>
-            )}
+            
 
             {step === "done" && (
               <div className="text-center py-8 space-y-4 animate-scale-in">
