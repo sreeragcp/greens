@@ -21,8 +21,8 @@ export interface SidebarItem {
 
 export const adminSidebar: SidebarItem[] = [
   { label: "Dashboard", to: "/admin", icon: LayoutDashboard },
-  // { label: "Add Student", to: "/teacher/students", icon: UserPlus },
   { label: "Students", to: "/admin/students", icon: Users },
+  { label: "Schools", to: "/admin/schools", icon: School },
   { label: "Templates", to: "/admin/card-templates", icon: CreditCard },
   { label: "Settings", to: "/admin/settings", icon: Settings },
 ];

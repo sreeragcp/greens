@@ -553,6 +553,16 @@ function AdminDashboard() {
           </div>
         </form> */}
 
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 glass-card rounded-xl p-5">
+          <div>
+            <p className="text-sm text-muted-foreground">School management</p>
+            <h2 className="text-lg font-semibold">Manage school data</h2>
+          </div>
+          <Button variant="secondary" onClick={() => navigate({ to: "/admin/schools" })}>
+            Go to Schools
+          </Button>
+        </div>
+
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>

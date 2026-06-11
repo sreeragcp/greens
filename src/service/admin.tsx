@@ -36,6 +36,25 @@ export const getSchools = async () => {
     throw error?.response?.data || error;
   }
 };
+
+export const createSchool = async (schoolData: {
+  name: string;
+  code: string;
+  city: string;
+  state: string;
+}) => {
+  try {
+    const response = await axiosInstance.post(
+      `${import.meta.env.VITE_API_BASE_URL}/schools/quick-add/`,
+      schoolData
+    );
+    return response.data;
+  } catch (error: any) {
+    console.error("Error creating school:", error);
+    throw error?.response?.data || error;
+  }
+};
+
 export const getSchoolClasses = async (schoolId: number) => {
   try {
     const response = await axiosInstance.get(
