@@ -27,7 +27,7 @@ import {
   normalizeStudentStatus,
   type StudentWorkflowStatus,
 } from "@/lib/student-status";
-import { isValidIndianMobile } from "@/lib/utils";
+import { isValidIndianMobile, filterDigitsOnly } from "@/lib/utils";
 import { patchStudentStatus } from "@/service/students";
 import {
   handleGetTeacherDetails,
@@ -698,11 +698,6 @@ function StudentForm({
   const validateForm = () => {
     const nextErrors: typeof errors = {};
 
-    if (!form.teacherName.trim()) {
-      toast.error("Teacher name is required.");
-      return false;
-    }
-
     if (!form.parentMobile.trim() || !isValidIndianMobile(form.parentMobile)) {
       nextErrors.parentMobile =
         "Mobile number should follow Indian standard: 10 digits starting with 6-9.";
@@ -722,7 +717,7 @@ function StudentForm({
 
   const handleSave = (targetStatus: StudentWorkflowStatus) => {
     if (!validateForm()) {
-      toast.error("Please fix the mobile number fields before saving.");
+      toast.error("Please fix the validation errors before saving.");
       return;
     }
     onSave(form, targetStatus);
@@ -873,16 +868,25 @@ function StudentForm({
           />
         </div>
         <div className="space-y-2">
-          <Label>Parent Mobile *</Label>
+          <Label>Parent Mobile * (10 digits)</Label>
           <Input
             type="tel"
+            inputMode="numeric"
+            maxLength={10}
             value={form.parentMobile}
-            onChange={(e) => setForm({ ...form, parentMobile: e.target.value })}
-            placeholder="+91 XXXXX XXXXX"
+            onChange={(e) => setForm({ ...form, parentMobile: filterDigitsOnly(e.target.value) })}
+            placeholder="9876543210"
             className="bg-surface border-border"
           />
           {errors.parentMobile && (
             <p className="text-xs text-destructive">{errors.parentMobile}</p>
+          )}
+          {form.parentMobile && !errors.parentMobile && (
+            <p className={`text-xs ${
+              isValidIndianMobile(form.parentMobile) ? "text-emerald-600" : "text-destructive"
+            }`}>
+              {isValidIndianMobile(form.parentMobile) ? "✓ Valid" : "✗ Invalid (6-9 start, 10 digits)"}
+            </p>
           )}
         </div>
         <div className="space-y-2">
@@ -896,19 +900,28 @@ function StudentForm({
           />
         </div>
         <div className="space-y-2">
-          <Label>Emergency Contact</Label>
+          <Label>Emergency Contact (10 digits)</Label>
           <Input
             type="tel"
+            inputMode="numeric"
+            maxLength={10}
             value={form.emergencyContact}
             onChange={(e) =>
-              setForm({ ...form, emergencyContact: e.target.value })
+              setForm({ ...form, emergencyContact: filterDigitsOnly(e.target.value) })
             }
-            placeholder="+91 XXXXX XXXXX"
+            placeholder="9876543210"
             className="bg-surface border-border"
           />
           {errors.emergencyContact && (
             <p className="text-xs text-destructive">
               {errors.emergencyContact}
+            </p>
+          )}
+          {form.emergencyContact && !errors.emergencyContact && (
+            <p className={`text-xs ${
+              isValidIndianMobile(form.emergencyContact) ? "text-emerald-600" : "text-destructive"
+            }`}>
+              {isValidIndianMobile(form.emergencyContact) ? "✓ Valid" : "✗ Invalid (6-9 start, 10 digits)"}
             </p>
           )}
         </div>

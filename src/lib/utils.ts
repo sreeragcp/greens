@@ -17,3 +17,7 @@ export function normalizeIndianMobile(value: string) {
 export function isValidIndianMobile(value: string) {
   return normalizeIndianMobile(value).length === 10;
 }
+
+export function filterDigitsOnly(value: string) {
+  return value.replace(/\D/g, "").slice(0, 10);
+}

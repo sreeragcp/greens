@@ -20,7 +20,7 @@ import parentChild from "@/assets/parent-child.jpg";
 import teacherClassroom from "@/assets/teacher-classroom.jpg";
 import adminOffice from "@/assets/admin-office.jpg";
 import { handleLoginWithPassword } from "@/service/auth";
-import { isValidIndianMobile } from "@/lib/utils";
+import { isValidIndianMobile, filterDigitsOnly } from "@/lib/utils";
 import { login } from "@/redux/authSlice";
 import { AppDispatch } from "@/redux/store";
 
@@ -227,17 +227,26 @@ function LoginPage() {
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="+91 XXXXX XXXXX"
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="9876543210"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={(e) => setPhoneNumber(filterDigitsOnly(e.target.value))}
                       className="bg-surface border-border focus:border-primary pl-10"
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {selectedRole === "teacher"
-                      ? "Enter your registered teacher mobile number"
-                      : "Enter your authorized admin mobile number"}
+                      ? "Enter your registered teacher mobile number (10 digits)"
+                      : "Enter your authorized admin mobile number (10 digits)"}
                   </p>
+                  {phoneNumber && (
+                    <p className={`text-xs ${
+                      isValidIndianMobile(phoneNumber) ? "text-emerald-600" : "text-destructive"
+                    }`}>
+                      {isValidIndianMobile(phoneNumber) ? "✓ Valid mobile number" : "✗ Invalid mobile number (6-9 start, 10 digits)"}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

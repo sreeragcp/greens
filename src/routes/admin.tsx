@@ -932,9 +932,24 @@ function AdminStudentDetail({
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="bg-surface border-border" />
             </div>
             <div className="sm:col-span-2 space-y-2">
-              <Label>Emergency Contact</Label>
-              <Input value={form.emergencyContact} onChange={(e) => setForm({ ...form, emergencyContact: e.target.value })} className="bg-surface border-border" />
+              <Label>Emergency Contact (10 digits)</Label>
+              <Input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={form.emergencyContact}
+                onChange={(e) => setForm({ ...form, emergencyContact: filterDigitsOnly(e.target.value) })}
+                placeholder="9876543210"
+                className="bg-surface border-border"
+              />
               {errors.emergencyContact && <p className="text-xs text-destructive">{errors.emergencyContact}</p>}
+              {form.emergencyContact && !errors.emergencyContact && (
+                <p className={`text-xs ${
+                  isValidIndianMobile(form.emergencyContact) ? "text-emerald-600" : "text-destructive"
+                }`}>
+                  {isValidIndianMobile(form.emergencyContact) ? "✓ Valid" : "✗ Invalid (6-9 start, 10 digits)"}
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter>

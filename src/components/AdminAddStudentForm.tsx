@@ -68,11 +68,6 @@ export function AdminAddStudentForm({
       return false;
     }
 
-    if (!form.teacherName.trim()) {
-      toast.error("Teacher name is required");
-      return false;
-    }
-
     if (!form.admissionNo.trim()) {
       toast.error("Admission number is required");
       return false;
@@ -97,7 +92,7 @@ export function AdminAddStudentForm({
 
   const handleSave = () => {
     if (!validateForm()) {
-      toast.error("Please fix the errors before saving.");
+      toast.error("Please fix the validation errors before saving.");
       return;
     }
     onSave(form);
@@ -299,20 +294,29 @@ export function AdminAddStudentForm({
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label className="text-sm font-medium">Emergency Contact</Label>
+                <Label className="text-sm font-medium">Emergency Contact (10 digits)</Label>
                 <Input
                   type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
                   value={form.emergencyContact}
                   onChange={(e) =>
-                    setForm({ ...form, emergencyContact: e.target.value })
+                    setForm({ ...form, emergencyContact: filterDigitsOnly(e.target.value) })
                   }
-                  placeholder="10-digit emergency contact number"
+                  placeholder="9876543210"
                   className="bg-surface border-border"
                 />
                 {errors.emergencyContact && (
                   <p className="text-xs text-destructive flex items-center gap-1">
                     <AlertCircle size={12} />
                     {errors.emergencyContact}
+                  </p>
+                )}
+                {form.emergencyContact && !errors.emergencyContact && (
+                  <p className={`text-xs flex items-center gap-1 ${
+                    isValidIndianMobile(form.emergencyContact) ? "text-emerald-600" : "text-destructive"
+                  }`}>
+                    {isValidIndianMobile(form.emergencyContact) ? "✓ Valid" : "✗ Invalid (6-9 start, 10 digits)"}
                   </p>
                 )}
               </div>
